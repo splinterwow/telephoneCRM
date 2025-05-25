@@ -38,7 +38,7 @@ import {
   Info,
 } from "lucide-react";
 import {
-  Dialog as ShadDialog,
+  Dialog as ShadDialog, // Dialog nomini o'zgartiramiz, chunki AddProductDialog da ham Dialog bor
   DialogContent as ShadDialogContent,
   DialogDescription as ShadDialogDescription,
   DialogFooter as ShadDialogFooter,
@@ -52,8 +52,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { AddProductDialog } from "@/components/Products/AddProductDialog";
-import { EditProductDialog } from "@/components/Products/EditProductDialog";
+// AddProductDialog va EditProductDialog importlari sizning loyihangiz strukturasiga mos kelishi kerak
+import { AddProductDialog, DialogView as AddDialogView } from "@/components/Products/AddProductDialog"; // DialogView ni ham import qilamiz
+import { EditProductDialog } from "@/components/Products/EditProductDialog"; // Buni ham to'g'ri import qiling
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import JsBarcode from "jsbarcode";
@@ -100,7 +101,7 @@ interface BarcodeDisplayProps {
   fontSize?: number;
   textMargin?: number;
   svgMargin?: number;
-  displayValue?: boolean; // Shtrix-kod ostidagi raqamni ko'rsatish/yashirish uchun
+  displayValue?: boolean;
 }
 
 const BarcodeDisplay: React.FC<BarcodeDisplayProps> = ({
@@ -108,10 +109,10 @@ const BarcodeDisplay: React.FC<BarcodeDisplayProps> = ({
   className,
   barWidth = 1.2,
   barHeight = 25,
-  fontSize = 12, // displayValue false bo'lsa, bu ahamiyatsiz
-  textMargin = 1, // displayValue false bo'lsa, bu ahamiyatsiz
+  fontSize = 12,
+  textMargin = 1,
   svgMargin = 0,
-  displayValue = false, // Standart holatda raqam ko'rsatilmaydi
+  displayValue = false,
 }) => {
   const barcodeRef = useRef<SVGSVGElement>(null);
   useEffect(() => {
@@ -122,8 +123,8 @@ const BarcodeDisplay: React.FC<BarcodeDisplayProps> = ({
           lineColor: "#000000",
           width: barWidth,
           height: barHeight,
-          displayValue: displayValue, // Prop orqali boshqariladi
-          text: displayValue ? value : undefined, // Agar displayValue false bo'lsa, text ham bo'lmaydi
+          displayValue: displayValue,
+          text: displayValue ? value : undefined,
           fontSize: fontSize,
           textMargin: textMargin,
           margin: svgMargin,
@@ -146,12 +147,10 @@ export default function ProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]); // Bu AddProductDialog'ga prop sifatida uzatilmaydi
 
   const [isAddProductDialogOpen, setIsAddProductDialogOpen] = useState(false);
-  const [addDialogInitialView, setAddDialogInitialView] = useState<
-    "phone" | "accessory"
-  >("phone");
+  const [addDialogInitialView, setAddDialogInitialView] = useState<AddDialogView>("phone"); // AddDialogView ishlatiladi
 
   const [selectedProductForEdit, setSelectedProductForEdit] =
     useState<Product | null>(null);
@@ -181,7 +180,6 @@ export default function ProductsPage() {
 
   const navigate = useNavigate();
 
-  // Jadval uchun narxlarni formatlash (o'zgarishsiz)
   const formatPriceForTable = useCallback(
     (
       price: string | null | undefined,
@@ -261,7 +259,6 @@ export default function ProductsPage() {
         setIsLoading(false);
         return;
       }
-
       setProducts(fetchedProducts.filter((p) => p.is_active === true).reverse());
     } catch (err: any) {
       if (err.response?.status === 401) {
@@ -288,6 +285,8 @@ export default function ProductsPage() {
   }, [navigate]);
 
   const fetchCategories = useCallback(async () => {
+    // Bu funksiya kategoriya qo'shish modalida kerak bo'lishi mumkin,
+    // lekin AddProductDialog o'zi kategoriyalarni yuklaydi.
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) return;
@@ -303,7 +302,7 @@ export default function ProductsPage() {
       setCategories(categoriesData);
     } catch (err) {
       console.error("Kategoriyalarni yuklashda xatolik:", err);
-      toast.error("Kategoriyalarni yuklashda xatolik.");
+      // Bu yerda toast chiqarish shart emas, chunki bu asosan orqa fon ishi
     }
   }, []);
 
@@ -336,6 +335,9 @@ export default function ProductsPage() {
       );
       setIsAddCategoryModalOpen(false);
       setNewCategoryData({ name: "", description: "", barcode_prefix: "" });
+      // Agar AddProductDialog ochiq bo'lsa, uni yangilash uchun signal yuborish kerak bo'lishi mumkin
+      // yoki AddProductDialog kategoriyalarni o'zi qayta yuklashi kerak.
+      // Hozirgi holatda AddProductDialog o'zi kategoriyalarni yuklaydi.
     } catch (err: any) {
       let errorMessage = `Kategoriya qo'shishda xatolik: `;
       if (err.response?.data && typeof err.response.data === "object") {
@@ -360,7 +362,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchProducts();
-    fetchCategories();
+    fetchCategories(); // Kategoriya modalida kerak bo'lishi mumkin
   }, [fetchProducts, fetchCategories]);
 
   const filteredProducts = useMemo(() => {
@@ -405,37 +407,42 @@ export default function ProductsPage() {
   }, [products, search]);
 
   const handleProductAdded = (newlyAddedProduct: Product) => {
-    setProducts((prev) => [newlyAddedProduct, ...prev]);
+    // setProducts((prev) => [newlyAddedProduct, ...prev]); // Bu optimistik update
+    fetchProducts(); // Yoki qayta fetch qilish, chunki omborga ham qo'shilgan bo'lishi mumkin
     setIsAddProductDialogOpen(false);
   };
   const handleProductSuccessfullyEdited = (editedProduct: Product) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === editedProduct.id ? editedProduct : p))
-    );
+    // setProducts((prev) =>
+    //   prev.map((p) => (p.id === editedProduct.id ? editedProduct : p))
+    // );
+    fetchProducts(); // Tahrirlashdan keyin ham qayta fetch qilish yaxshiroq
     setIsEditDialogOpen(false);
     setSelectedProductForEdit(null);
   };
 
   const handleDeleteConfirmation = async () => {
     if (!productToDelete) return;
+    // Optimistik update
     const originalProducts = [...products];
     setProducts((prev) => prev.filter((p) => p.id !== productToDelete!.id));
     setIsDeleteDialogOpen(false);
+
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) {
         toast.error("Avtorizatsiya tokeni yo'q.");
-        setProducts(originalProducts);
+        setProducts(originalProducts); // Qaytaramiz
         setProductToDelete(null);
         return;
       }
       await axios.patch(
         `${API_URL_PRODUCT_OPERATIONS}${productToDelete.id}/`,
-        { is_active: false },
+        { is_active: false }, // Arxivlash uchun
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast.success(`"${productToDelete.name}" arxivlandi.`);
       setProductToDelete(null);
+      // fetchProducts(); // Bu yerda qayta fetch shart emas, chunki optimistik o'chirdik
     } catch (err: any) {
       let errMsg = `"${productToDelete.name}" ni arxivlashda xato: `;
       if (err.response?.data && typeof err.response.data === 'object') {
@@ -447,7 +454,7 @@ export default function ProductsPage() {
         errMsg += err.message || "Noma'lum xato.";
       }
       toast.error(errMsg.trim(), { duration: 7000 });
-      setProducts(originalProducts);
+      setProducts(originalProducts); // Xatolikda orqaga qaytaramiz
       setProductToDelete(null);
     }
   };
@@ -463,7 +470,6 @@ export default function ProductsPage() {
 
   const handleOpenPrintModal = () => {
     const sourceList = search.trim() ? filteredProducts : products;
-    // Faqat shtrix-kodi mavjud mahsulotlarni filterlash
     const itemsToPrint = sourceList.filter(
       (p) =>  p.barcode && p.barcode.trim() !== ""
     );
@@ -471,7 +477,7 @@ export default function ProductsPage() {
       setEligibleProductsForPrint(itemsToPrint);
       const initialSelections: Record<number, boolean> = {};
       itemsToPrint.forEach((p) => {
-        initialSelections[p.id] = true; // Hamma mos mahsulotlar boshida tanlangan bo'ladi
+        initialSelections[p.id] = true;
       });
       setSelectedProductsToPrint(initialSelections);
       setIsPrintModalOpen(true);
@@ -480,7 +486,6 @@ export default function ProductsPage() {
     }
   };
 
-  // Ommaviy chop etish funksiyasi
   const printContentBulk = (items: Product[]) => {
     if (!items || items.length === 0) {
       toast.info("Mahsulot tanlanmagan.");
@@ -494,15 +499,14 @@ export default function ProductsPage() {
     }
     let labelsHtml = items
       .map((p) => {
-        if (!p.barcode) return ""; // Shtrix-kodi yo'qlarini o'tkazib yuborish
+        if (!p.barcode) return "";
 
-        // Mahsulot detallarini yig'ish
         const details: string[] = [];
         if (p.storage_capacity) details.push(`Xotira: ${p.storage_capacity}`);
         const pType = determineProductTypeForDisplay(p);
         if (pType === "iPhone" && p.battery_health)
           details.push(`Batareya: ${p.battery_health}%`);
-        if (pType === "iPhone" && p.series_region) // Region qo'shildi
+        if (pType === "iPhone" && p.series_region)
             details.push(`Region: ${p.series_region}`);
         if (pType === "Aksesuar" && p.description)
           details.push(
@@ -516,10 +520,8 @@ export default function ProductsPage() {
             ? `<div class="label-details">${details
                 .map((d) => `<div class="detail-item">${d}</div>`)
                 .join("")}</div>`
-            : '<div class="label-details-placeholder"></div>'; // Agar detallar bo'lmasa, bo'sh joy uchun placeholder
+            : '<div class="label-details-placeholder"></div>';
 
-        // Narx qismi olib tashlandi
-        // Shtrix-kod ostidagi raqam ko'rsatilmaydi (data-display-value="false", data-font-size="0")
         return `<div class="print-label">
                     <div class="label-name">${p.name || ""}</div>
                     ${detailsHtml}
@@ -539,105 +541,31 @@ export default function ProductsPage() {
       .join("");
     printWin.document.write(
       `<html><head><title>Shtrix Kodlar (50x30mm)</title><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script><style>
-      @page{
-        size: 50mm 30mm; /* Yorliq o'lchami */
-        margin: 0mm !important; /* Chekka bo'shliqlar nol */
-      }
-      html,body{
-        width:50mm;height:30mm;
-        margin:0 !important;padding:0;box-sizing:border-box;
-        font-family:'Arial',sans-serif;
-        -webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;
-        background-color:#fff;overflow:hidden;
-      }
-      .print-label{
-        width:100%;height:100%;
-        padding: 2.5mm 2mm 1.5mm 2mm; /* Yuqori, Yon, Pastki padding */
-        text-align:center;
-        display:flex;flex-direction:column;justify-content:space-between; /* Elementlarni vertikal taqsimlash */
-        align-items:center;box-sizing:border-box;
-        overflow:hidden !important;page-break-after:always;
-      }
-      .label-name{
-        font-size:9pt; /* Kattaroq shrift */
-        font-weight:bold; 
-        margin-bottom:1mm; /* Nomdan keyingi bo'shliq */
-        color:#000;
-        width:100%;
-        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1;
-      }
-      .label-details{
-        width:100%;
-        font-size:7.5pt; /* Kichikroq shrift */
-        font-weight:normal; 
-        color:#000;text-align:center;
-        margin-bottom:1mm; /* Detallardan keyingi bo'shliq */
-        line-height:1.15;
-        min-height: 4mm; /* Agar detallar bo'lmasa ham joy egallashi uchun */
-      }
-      .label-details-placeholder { /* Agar detallar bo'lmasa, bu class ishlatiladi */
-        min-height: 4mm; /* Minimal balandlik */
-        width: 100%;
-      }
-      .detail-item{
-        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;
-        line-height:1.15; /* Qatorlar orasidagi masofa */
-      }
-      .label-barcode-container{ /* Shtrix-kod konteyneri */
-        width:100%;
-        display:flex;justify-content:center;align-items:flex-end;
-      }
-      .label-barcode-container svg{
-        display:block;
-        max-width: 95%; /* Konteyner kengligidan oshmasligi uchun */
-        width: 44mm; /* Shtrix-kodning aniq kengligi */
-        height:auto;
-        max-height:9mm; /* Shtrix-kodning maksimal balandligi */
-      }
+      @page{size: 50mm 30mm; margin: 0mm !important;}
+      html,body{width:50mm;height:30mm;margin:0 !important;padding:0;box-sizing:border-box;font-family:'Arial',sans-serif;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;background-color:#fff;overflow:hidden;}
+      .print-label{width:100%;height:100%;padding: 2.5mm 2mm 1.5mm 2mm;text-align:center;display:flex;flex-direction:column;justify-content:space-between;align-items:center;box-sizing:border-box;overflow:hidden !important;page-break-after:always;}
+      .label-name{font-size:9pt;font-weight:bold; margin-bottom:1mm;color:#000;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1;}
+      .label-details{width:100%;font-size:7.5pt;font-weight:normal; color:#000;text-align:center;margin-bottom:1mm;line-height:1.15;min-height: 4mm;}
+      .label-details-placeholder {min-height: 4mm;width: 100%;}
+      .detail-item{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;line-height:1.15;}
+      .label-barcode-container{width:100%;display:flex;justify-content:center;align-items:flex-end;}
+      .label-barcode-container svg{display:block;max-width: 95%;width: 44mm;height:auto;max-height:9mm;}
       </style></head><body>${labelsHtml}<script>
       window.onload=function(){
-        try{
-          document.querySelectorAll(".barcode-svg").forEach(svg=>{
-            const val=svg.getAttribute("data-value");
-            const displayValAttr=svg.getAttribute("data-display-value");
-            // data-display-value string "false" bo'lishi mumkin, shuning uchun to'g'ri boolean ga o'tkazamiz
-            const displayVal = displayValAttr === 'true'; // Yoki kerak bo'lsa displayValAttr !== 'false'
-            if(val)JsBarcode(svg,val,{
-              format:"CODE128",lineColor:"#000",
-              width:parseFloat(svg.getAttribute("data-bar-width") || "1.1"),
-              height:parseInt(svg.getAttribute("data-bar-height") || "28"),
-              displayValue:displayVal, // Raqam ko'rsatilmaydi
-              text:displayVal?val:undefined, // Agar displayValue false bo'lsa, text ham bo'lmaydi
-              fontSize:parseFloat(svg.getAttribute("data-font-size") || "0"), // Raqam shrifti 0
-              textMargin:parseFloat(svg.getAttribute("data-text-margin") || "0"),
-              margin:parseInt(svg.getAttribute("data-svg-margin") || "0"),
-              font:"Arial",textAlign:"center"
-            })
-          })
-        } catch(e){console.error("JsBarcode error:",e)}
-        setTimeout(()=>{
-          window.print();
-          var mql=window.matchMedia("print");
-          function closeWindow(){if(printWin&&!printWin.closed)setTimeout(()=>printWin.close(),200)}
-          mql.addListener(e=>{if(!e.matches)closeWindow()});
-          window.onafterprint=closeWindow;
-          setTimeout(closeWindow,7e3)
-        },700)
-      }
+        try{document.querySelectorAll(".barcode-svg").forEach(svg=>{const val=svg.getAttribute("data-value");const displayValAttr=svg.getAttribute("data-display-value");const displayVal=displayValAttr==='true';if(val)JsBarcode(svg,val,{format:"CODE128",lineColor:"#000",width:parseFloat(svg.getAttribute("data-bar-width")||"1.1"),height:parseInt(svg.getAttribute("data-bar-height")||"28"),displayValue:displayVal,text:displayVal?val:undefined,fontSize:parseFloat(svg.getAttribute("data-font-size")||"0"),textMargin:parseFloat(svg.getAttribute("data-text-margin")||"0"),margin:parseInt(svg.getAttribute("data-svg-margin")||"0"),font:"Arial",textAlign:"center"})})}catch(e){console.error("JsBarcode error:",e)}
+        setTimeout(()=>{window.print();var mql=window.matchMedia("print");function closeWindow(){if(printWin&&!printWin.closed)setTimeout(()=>printWin.close(),200)}mql.addListener(e=>{if(!e.matches)closeWindow()});window.onafterprint=closeWindow;setTimeout(closeWindow,7e3)},700)}
       </script></body></html>`
     );
     printWin.document.close();
     if (isPrintModalOpen) setIsPrintModalOpen(false);
   };
 
-  // Yakka mahsulotni chop etish funksiyasi
   const printSingleProductWithApiData = async (product: Product) => {
     if (!product.id) {
       toast.error("Mahsulot ID si topilmadi.");
       return;
     }
-    // Shtrix-kod mavjudligini tekshirish
-    if (!product.barcode) { // Agar shtrix-kod yo'q bo'lsa
+    if (!product.barcode) {
         toast.info(`"${product.name}" uchun shtrix-kod mavjud emas.`);
         return;
     }
@@ -649,12 +577,9 @@ export default function ProductsPage() {
         setPrintingProductId(null);
         return;
       }
-
-      // API orqali chop etish uchun ma'lumotlarni olish (narx so'ralmaydi)
       const response = await axios.get<{
         name: string;
-        barcode_image_base64: string; // Faqat shtrix-kod rasmi
-        // barcode_number olib tashlandi, chunki u kerak emas
+        barcode_image_base64: string;
         battery_health?: string;
         series_region?: string;
       }>(
@@ -673,16 +598,14 @@ export default function ProductsPage() {
         return;
       }
 
-      // Mahsulot detallarini yig'ish
       const detailsArray: string[] = [];
       if (product.storage_capacity)
         detailsArray.push(`Xotira: ${product.storage_capacity}`);
       const productType = determineProductTypeForDisplay(product);
       if (productType === "iPhone") {
-        // API dan yoki lokal ma'lumotdan batareya va regionni olish
-        if (printData.battery_health || product.battery_health) // Agar API da bo'lmasa, lokal ma'lumotdan
+        if (printData.battery_health || product.battery_health)
           detailsArray.push(`Batareya: ${printData.battery_health || product.battery_health}%`);
-        if (printData.series_region || product.series_region) // Agar API da bo'lmasa, lokal ma'lumotdan
+        if (printData.series_region || product.series_region)
           detailsArray.push(`Region: ${printData.series_region || product.series_region}`);
       }
       if (productType === "Aksesuar" && product.description)
@@ -696,73 +619,20 @@ export default function ProductsPage() {
           ? `<div class="label-details">${detailsArray
               .map((d) => `<div class="detail-item">${d}</div>`)
               .join("")}</div>`
-          : '<div class="label-details-placeholder"></div>'; // Agar detallar bo'lmasa, bo'sh joy uchun
+          : '<div class="label-details-placeholder"></div>';
 
-      // Narx qismi va shtrix-kod ostidagi raqam olib tashlandi
       printWindow.document.write(
-        `<html><head><title>Yorliq - ${
-          printData.name
-        }</title><style>
-        @page{
-            size: 50mm 30mm; /* Yorliq o'lchami */
-            margin: 0mm !important; /* Chekka bo'shliqlar nol */
-        }
-        html,body{
-            width:50mm;height:30mm;
-            margin:0 !important;padding:0;box-sizing:border-box;
-            font-family:'Arial',sans-serif;
-            -webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;
-            background-color:#fff;overflow:hidden;
-        }
-        .print-label{
-            width:100%;height:100%;
-            padding: 3mm 2mm 1.5mm 2mm; /* Yuqori, Yon, Pastki padding */
-            text-align:center;
-            display:flex;flex-direction:column;justify-content:space-between; /* Elementlarni vertikal taqsimlash */
-            align-items:center;box-sizing:border-box;overflow:hidden !important;
-        }
-        .label-name{
-            font-size:9pt; /* Kattaroq shrift */
-            font-weight:bold; 
-            margin-bottom:1mm; /* Nomdan keyingi bo'shliq */
-            color:#000;
-            width:100%;
-            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1;
-        }
-        .label-details{
-            width:100%;
-            font-size:7.5pt; /* Kichikroq shrift */
-            font-weight:normal;
-            color:#000;text-align:center;
-            margin-bottom:1mm; /* Detallardan keyingi bo'shliq */
-            line-height:1.15;
-            min-height: 4mm; /* Agar detallar bo'lmasa ham joy egallashi uchun */
-        }
-        .label-details-placeholder { /* Agar detallar bo'lmasa, bu class ishlatiladi */
-            min-height: 4mm; /* Minimal balandlik */
-            width: 100%;
-        }
-        .detail-item{
-            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;
-            line-height:1.15; /* Qatorlar orasidagi masofa */
-        }
-        .label-barcode-container{ /* Shtrix-kod konteyneri */
-            width:100%;
-            display:flex;justify-content:center;align-items:flex-end;
-        }
-        .label-barcode-image{ /* Shtrix-kod rasmi */
-            max-width: 95%; /* Konteyner kengligidan oshmasligi uchun */
-            width: 44mm; /* Shtrix-kodning aniq kengligi */
-            height:auto;
-            max-height:9mm; /* Shtrix-kodning maksimal balandligi */
-            display:block;
-        }
-        /* Shtrix-kod ostidagi raqam uchun .label-barcode-number classi olib tashlandi */
-        </style></head><body><div class="print-label"><div class="label-name">${
-          printData.name || ""
-        }</div>${detailsHtml}<div class="label-barcode-container"><img src="${
-          printData.barcode_image_base64 // Faqat rasm ko'rsatiladi
-        }" alt="Barcode" class="label-barcode-image"/></div></div><script>window.onload=function(){setTimeout(()=>{window.print();window.close();},500);}</script></body></html>`
+        `<html><head><title>Yorliq - ${printData.name}</title><style>
+        @page{size: 50mm 30mm;margin: 0mm !important;}
+        html,body{width:50mm;height:30mm;margin:0 !important;padding:0;box-sizing:border-box;font-family:'Arial',sans-serif;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;background-color:#fff;overflow:hidden;}
+        .print-label{width:100%;height:100%;padding: 3mm 2mm 1.5mm 2mm;text-align:center;display:flex;flex-direction:column;justify-content:space-between;align-items:center;box-sizing:border-box;overflow:hidden !important;}
+        .label-name{font-size:9pt;font-weight:bold; margin-bottom:1mm;color:#000;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1;}
+        .label-details{width:100%;font-size:7.5pt;font-weight:normal;color:#000;text-align:center;margin-bottom:1mm;line-height:1.15;min-height: 4mm;}
+        .label-details-placeholder {min-height: 4mm;width: 100%;}
+        .detail-item{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;line-height:1.15;}
+        .label-barcode-container{width:100%;display:flex;justify-content:center;align-items:flex-end;}
+        .label-barcode-image{max-width: 95%;width: 44mm;height:auto;max-height:9mm;display:block;}
+        </style></head><body><div class="print-label"><div class="label-name">${printData.name || ""}</div>${detailsHtml}<div class="label-barcode-container"><img src="${printData.barcode_image_base64}" alt="Barcode" class="label-barcode-image"/></div></div><script>window.onload=function(){setTimeout(()=>{window.print();var mql=window.matchMedia("print");function closeWindow(){if(printWindow&&!printWindow.closed)setTimeout(()=>printWindow.close(),200)}mql.addListener(e=>{if(!e.matches)closeWindow()});window.onafterprint=closeWindow;setTimeout(closeWindow,7e3)},500);}</script></body></html>`
       );
       printWindow.document.close();
     } catch (err: any) {
@@ -958,7 +828,11 @@ export default function ProductsPage() {
                           : "-"}
                       </TableCell>
                       <TableCell className="hidden md:table-cell px-2 sm:px-4">
-                        {formatPriceForTable(p.purchase_price_usd, "$")}
+                        {p.purchase_price_usd && parseFloat(p.purchase_price_usd) > 0
+                         ? formatPriceForTable(p.purchase_price_usd, "$")
+                         : p.purchase_price_uzs && parseFloat(p.purchase_price_uzs) > 0
+                         ? formatPriceForTable(p.purchase_price_uzs, "so'm")
+                         : "-"}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell px-2 sm:px-4">
                         {p.storage_capacity || "-"}
@@ -973,7 +847,7 @@ export default function ProductsPage() {
                           className="h-7 w-7 text-sky-600 hover:bg-sky-100"
                           onClick={() => printSingleProductWithApiData(p)}
                           title="Yorliq chop etish"
-                          disabled={printingProductId === p.id || !p.barcode} // Shtrix-kodi bo'lmasa ham disable
+                          disabled={printingProductId === p.id || !p.barcode}
                         >
                           {printingProductId === p.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1030,7 +904,7 @@ export default function ProductsPage() {
           />
         )}
         {isEditDialogOpen && selectedProductForEdit && (
-          <EditProductDialog
+          <EditProductDialog // Bu komponentni ham yaratishingiz kerak
             open={isEditDialogOpen}
             onOpenChange={(isOpen) => {
               setIsEditDialogOpen(isOpen);
@@ -1209,12 +1083,10 @@ export default function ProductsPage() {
                         <div>
                           <div className="font-semibold text-sm">{p.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            {/* Narx ko'rsatilmaydi */}
                             {p.storage_capacity && `${p.storage_capacity}`}
                             {determineProductTypeForDisplay(p) === "iPhone" &&
                               p.battery_health &&
                               ` | Bat: ${p.battery_health}%`}
-                            {/* Shtrix-kod raqami ham ko'rsatilmaydi */}
                           </div>
                         </div>
                         <div className="w-32 h-12 flex items-center justify-center border rounded-sm bg-white p-0.5 ml-2 shrink-0">
@@ -1223,9 +1095,9 @@ export default function ProductsPage() {
                               value={p.barcode}
                               barWidth={0.6}
                               barHeight={18}
-                              fontSize={0} // Raqam ko'rsatilmagani uchun ahamiyatsiz
+                              fontSize={0}
                               textMargin={0}
-                              displayValue={false} // Raqam ko'rsatilmaydi
+                              displayValue={false}
                             />
                           )}
                         </div>
@@ -1254,79 +1126,7 @@ export default function ProductsPage() {
             </ShadDialogFooter>
           </ShadDialogContent>
         </ShadDialog>
-        <style jsx global>{`
-          /* Global stillar (o'zgarishsiz qoldi, chunki ular chop etish oynasiga ta'sir qilmaydi) */
-          .print-preview-grid-modal {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            gap: 10px;
-            padding: 10px;
-          }
-          .print-preview-label-modal {
-            border: 1px solid #e2e8f0;
-            padding: 8px 10px;
-            text-align: center;
-            background-color: #fff;
-            border-radius: 4px;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            align-items: center;
-            min-height: 130px;
-            font-family: "Arial", sans-serif;
-          }
-          .dark .print-preview-label-modal {
-            background-color: #1e293b;
-            border-color: #334155;
-          }
-          .preview-label-name-modal {
-            font-weight: 600;
-            font-size: 0.8rem;
-            margin-bottom: 3px;
-            line-height: 1.2;
-            width: 100%;
-            color: #1f2937;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-          .dark .preview-label-name-modal {
-            color: #e2e8f0;
-          }
-          /* Narx bilan bog'liq preview stillari kerak emas, shuning uchun o'chirilishi mumkin */
-          /* .preview-label-price-modal ... */
-
-          .preview-label-details-container-modal {
-            width: 100%;
-            text-align: center;
-            margin-bottom: 4px;
-          }
-          .preview-label-details-item-modal {
-            font-size: 0.7rem;
-            font-weight: 500;
-            line-height: 1.2;
-            color: #475569;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            width: 100%;
-          }
-          .dark .preview-label-details-item-modal {
-            color: #94a3b8;
-          }
-          .preview-label-barcode-modal {
-            width: 100%;
-            margin-top: auto;
-            padding-bottom: 2px;
-          }
-          .preview-label-barcode-modal svg {
-            display: block;
-            margin: 0 auto;
-            max-width: 96%;
-            height: auto;
-          }
-        `}</style>
+        {/* Global stillar kerak bo'lsa, bu yerga yoki alohida CSS fayliga qo'shing */}
       </div>
     </TooltipProvider>
   );
