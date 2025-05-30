@@ -38,7 +38,7 @@ import {
   Info,
 } from "lucide-react";
 import {
-  Dialog as ShadDialog, // Dialog nomini o'zgartiramiz, chunki AddProductDialog da ham Dialog bor
+  Dialog as ShadDialog,
   DialogContent as ShadDialogContent,
   DialogDescription as ShadDialogDescription,
   DialogFooter as ShadDialogFooter,
@@ -52,9 +52,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-// AddProductDialog va EditProductDialog importlari sizning loyihangiz strukturasiga mos kelishi kerak
-import { AddProductDialog, DialogView as AddDialogView } from "@/components/Products/AddProductDialog"; // DialogView ni ham import qilamiz
-import { EditProductDialog } from "@/components/Products/EditProductDialog"; // Buni ham to'g'ri import qiling
+import { AddProductDialog, DialogView as AddDialogView } from "@/components/Products/AddProductDialog";
+import { EditProductDialog } from "@/components/Products/EditProductDialog";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import JsBarcode from "jsbarcode";
@@ -147,10 +146,10 @@ export default function ProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [categories, setCategories] = useState<Category[]>([]); // Bu AddProductDialog'ga prop sifatida uzatilmaydi
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const [isAddProductDialogOpen, setIsAddProductDialogOpen] = useState(false);
-  const [addDialogInitialView, setAddDialogInitialView] = useState<AddDialogView>("phone"); // AddDialogView ishlatiladi
+  const [addDialogInitialView, setAddDialogInitialView] = useState<AddDialogView>("phone");
 
   const [selectedProductForEdit, setSelectedProductForEdit] =
     useState<Product | null>(null);
@@ -237,23 +236,45 @@ export default function ProductsPage() {
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) {
-        setError("Avtorizatsiya qilinmagan.");
+        setError("Avtorizatsiya qilinmagan. Iltimos, tizimga kiring.");
         navigate("/login");
         setIsLoading(false);
         return;
       }
 
-      const response = await axios.get<{ results: Product[] } | Product[]>(
+      const params = { page_size: 10000 }; // Barcha mahsulotlarni olish uchun katta page_size
+
+      type PaginatedProductResponse = {
+        count: number;
+        next: string | null;
+        previous: string | null;
+        results: Product[];
+      };
+
+      const response = await axios.get<PaginatedProductResponse | Product[]>(
         API_URL_PRODUCTS_LISTING,
-        { headers: { Authorization: `Bearer ${token}` }, timeout: 20000 }
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 25000, // Vaqtni biroz oshirdik, ko'p ma'lumot uchun
+          params: params,
+        }
       );
 
       let fetchedProducts: Product[] = [];
       if ("results" in response.data && Array.isArray(response.data.results)) {
         fetchedProducts = response.data.results;
+        if (response.data.next && fetchedProducts.length < response.data.count) {
+          const warningMessage = `Mahsulotlar API'sidan barcha ma'lumotlar olinmagan bo'lishi mumkin. Paginatsiya mavjud ('next' linki topildi). Administrator bilan bog'laning yoki 'page_size' parametrini tekshiring.`;
+          console.warn(warningMessage, response.data.next);
+          // Foydalanuvchiga ham xabar berish
+          setError(
+            (prevError) => (prevError ? prevError + "\n" : "") + "Diqqat: Barcha mahsulotlar yuklanmagan bo'lishi mumkin."
+          );
+        }
       } else if (Array.isArray(response.data)) {
         fetchedProducts = response.data;
       } else {
+        console.error("Mahsulot ma'lumotlari kutilgan formatda emas:", response.data);
         setError("Mahsulot ma'lumotlari noto'g'ri formatda keldi.");
         setProducts([]);
         setIsLoading(false);
@@ -262,21 +283,27 @@ export default function ProductsPage() {
       setProducts(fetchedProducts.filter((p) => p.is_active === true).reverse());
     } catch (err: any) {
       if (err.response?.status === 401) {
-        setError("Sessiya muddati tugagan.");
+        setError("Sessiya muddati tugagan. Iltimos, qayta tizimga kiring.");
         navigate("/login");
-      } else if (
-        err.code === "ECONNABORTED" ||
-        err.message.includes("timeout")
-      ) {
-        setError("Serverga ulanishda vaqt tugadi.");
+      } else if (err.code === "ECONNABORTED" || err.message.includes("timeout")) {
+        setError("Serverga ulanishda vaqt tugadi. Internet aloqasini tekshiring yoki keyinroq urinib ko'ring.");
       } else {
-        setError(
-          "Ma'lumotlarni yuklashda xatolik: " +
-            (err.response?.data?.detail ||
-              err.response?.data?.non_field_errors?.[0] ||
-              err.message ||
-              "Noma'lum server xatosi.")
-        );
+        let errMsg = "Ma'lumotlarni yuklashda noma'lum xatolik yuz berdi.";
+        if (err.response?.data) {
+          if (err.response.data.detail) {
+            errMsg = err.response.data.detail;
+          } else if (typeof err.response.data === "object") {
+            // Django REST framework xatoliklarini formatlash
+            const errors = Object.entries(err.response.data)
+              .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
+              .join("; ");
+            if (errors) errMsg = errors;
+          }
+        } else if (err.message) {
+          errMsg = err.message;
+        }
+        setError(`Xatolik: ${errMsg}`);
+        console.error("Mahsulotlarni yuklashda xatolik:", err.response || err);
       }
       setProducts([]);
     } finally {
@@ -285,24 +312,43 @@ export default function ProductsPage() {
   }, [navigate]);
 
   const fetchCategories = useCallback(async () => {
-    // Bu funksiya kategoriya qo'shish modalida kerak bo'lishi mumkin,
-    // lekin AddProductDialog o'zi kategoriyalarni yuklaydi.
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) return;
-      const response = await axios.get<Category[] | { results: Category[] }>(
+
+      const params = { page_size: 1000 }; // Kategoriyalar uchun
+
+      type PaginatedCategoryResponse = {
+        count: number;
+        next: string | null;
+        previous: string | null;
+        results: Category[];
+      };
+
+      const response = await axios.get<PaginatedCategoryResponse | Category[]>(
         API_URL_CATEGORIES,
         {
           headers: { Authorization: `Bearer ${token}` },
+          params: params,
         }
       );
-      const categoriesData = Array.isArray(response.data)
-        ? response.data
-        : (response.data as any).results || [];
-      setCategories(categoriesData);
+      let categoriesData: Category[] = [];
+      if ("results" in response.data && Array.isArray(response.data.results)) {
+        categoriesData = response.data.results;
+         if (response.data.next && categoriesData.length < response.data.count) {
+           console.warn(
+            `Kategoriyalar API'sidan barcha ma'lumotlar olinmagan bo'lishi mumkin. Paginatsiya mavjud ('next' linki topildi: ${response.data.next}).`
+          );
+        }
+      } else if (Array.isArray(response.data)) {
+        categoriesData = response.data;
+      } else {
+         console.error("Kategoriya ma'lumotlari kutilgan formatda emas:", response.data);
+      }
+      setCategories(categoriesData.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
       console.error("Kategoriyalarni yuklashda xatolik:", err);
-      // Bu yerda toast chiqarish shart emas, chunki bu asosan orqa fon ishi
+      toast.error("Kategoriyalarni yuklashda xatolik yuz berdi.");
     }
   }, []);
 
@@ -330,14 +376,12 @@ export default function ProductsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast.success(`Kategoriya "${response.data.name}" qo'shildi!`);
+      // Kategoriyalarni qayta fetch qilish o'rniga, yangisini qo'shib, saralaymiz
       setCategories((prev) =>
         [response.data, ...prev].sort((a, b) => a.name.localeCompare(b.name))
       );
       setIsAddCategoryModalOpen(false);
       setNewCategoryData({ name: "", description: "", barcode_prefix: "" });
-      // Agar AddProductDialog ochiq bo'lsa, uni yangilash uchun signal yuborish kerak bo'lishi mumkin
-      // yoki AddProductDialog kategoriyalarni o'zi qayta yuklashi kerak.
-      // Hozirgi holatda AddProductDialog o'zi kategoriyalarni yuklaydi.
     } catch (err: any) {
       let errorMessage = `Kategoriya qo'shishda xatolik: `;
       if (err.response?.data && typeof err.response.data === "object") {
@@ -362,7 +406,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchProducts();
-    fetchCategories(); // Kategoriya modalida kerak bo'lishi mumkin
+    fetchCategories();
   }, [fetchProducts, fetchCategories]);
 
   const filteredProducts = useMemo(() => {
@@ -394,7 +438,7 @@ export default function ProductsPage() {
         ?.toLowerCase()
         .includes(lowerCaseSearch);
 
-      if (isPotentialCode) return barcodeOrImeiMatch;
+      if (isPotentialCode && searchTerms.length === 1) return barcodeOrImeiMatch; // Aniq kod qidirilganda
       return (
         nameMatch ||
         seriesRegionMatch ||
@@ -407,23 +451,24 @@ export default function ProductsPage() {
   }, [products, search]);
 
   const handleProductAdded = (newlyAddedProduct: Product) => {
-    // setProducts((prev) => [newlyAddedProduct, ...prev]); // Bu optimistik update
-    fetchProducts(); // Yoki qayta fetch qilish, chunki omborga ham qo'shilgan bo'lishi mumkin
+    // Optimistik yangilash yoki to'liq qayta yuklash
+    // Hozirda `AddProductDialog` `onAddProduct` orqali yangi mahsulotni qaytarmayapti,
+    // shuning uchun to'liq qayta yuklash yaxshiroq.
+    fetchProducts();
     setIsAddProductDialogOpen(false);
+    toast.success(`"${newlyAddedProduct.name}" muvaffaqiyatli qo'shildi!`);
   };
   const handleProductSuccessfullyEdited = (editedProduct: Product) => {
-    // setProducts((prev) =>
-    //   prev.map((p) => (p.id === editedProduct.id ? editedProduct : p))
-    // );
-    fetchProducts(); // Tahrirlashdan keyin ham qayta fetch qilish yaxshiroq
+    fetchProducts();
     setIsEditDialogOpen(false);
     setSelectedProductForEdit(null);
+    toast.success(`"${editedProduct.name}" muvaffaqiyatli tahrirlandi!`);
   };
 
   const handleDeleteConfirmation = async () => {
     if (!productToDelete) return;
-    // Optimistik update
     const originalProducts = [...products];
+    // Optimistik UI: Darhol ro'yxatdan o'chiramiz
     setProducts((prev) => prev.filter((p) => p.id !== productToDelete!.id));
     setIsDeleteDialogOpen(false);
 
@@ -431,18 +476,18 @@ export default function ProductsPage() {
       const token = localStorage.getItem("accessToken");
       if (!token) {
         toast.error("Avtorizatsiya tokeni yo'q.");
-        setProducts(originalProducts); // Qaytaramiz
+        setProducts(originalProducts);
         setProductToDelete(null);
         return;
       }
       await axios.patch(
         `${API_URL_PRODUCT_OPERATIONS}${productToDelete.id}/`,
-        { is_active: false }, // Arxivlash uchun
+        { is_active: false },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success(`"${productToDelete.name}" arxivlandi.`);
+      toast.success(`"${productToDelete.name}" muvaffaqiyatli arxivlandi.`);
+      // fetchProducts(); // Yoki faqat lokal state'ni yangilash kifoya, chunki faqat is_active o'zgardi
       setProductToDelete(null);
-      // fetchProducts(); // Bu yerda qayta fetch shart emas, chunki optimistik o'chirdik
     } catch (err: any) {
       let errMsg = `"${productToDelete.name}" ni arxivlashda xato: `;
       if (err.response?.data && typeof err.response.data === 'object') {
@@ -455,7 +500,7 @@ export default function ProductsPage() {
       }
       toast.error(errMsg.trim(), { duration: 7000 });
       setProducts(originalProducts); // Xatolikda orqaga qaytaramiz
-      setProductToDelete(null);
+      setProductToDelete(null); // Clear productToDelete even on error to allow re-try
     }
   };
 
@@ -471,13 +516,13 @@ export default function ProductsPage() {
   const handleOpenPrintModal = () => {
     const sourceList = search.trim() ? filteredProducts : products;
     const itemsToPrint = sourceList.filter(
-      (p) =>  p.barcode && p.barcode.trim() !== ""
+      (p) => p.barcode && p.barcode.trim() !== ""
     );
     if (itemsToPrint.length > 0) {
       setEligibleProductsForPrint(itemsToPrint);
       const initialSelections: Record<number, boolean> = {};
       itemsToPrint.forEach((p) => {
-        initialSelections[p.id] = true;
+        initialSelections[p.id] = true; // By default, select all eligible
       });
       setSelectedProductsToPrint(initialSelections);
       setIsPrintModalOpen(true);
@@ -488,12 +533,12 @@ export default function ProductsPage() {
 
   const printContentBulk = (items: Product[]) => {
     if (!items || items.length === 0) {
-      toast.info("Mahsulot tanlanmagan.");
+      toast.info("Chop etish uchun mahsulot tanlanmagan.");
       return;
     }
     const printWin = window.open("", "_blank", "width=400,height=600");
     if (!printWin) {
-      toast.error("Pop-up bloklandi.");
+      toast.error("Pop-up oynasi bloklangan. Brauzer sozlamalarini tekshiring.");
       setIsPrintModalOpen(false);
       return;
     }
@@ -520,7 +565,7 @@ export default function ProductsPage() {
             ? `<div class="label-details">${details
                 .map((d) => `<div class="detail-item">${d}</div>`)
                 .join("")}</div>`
-            : '<div class="label-details-placeholder"></div>';
+            : '<div class="label-details-placeholder"></div>'; // Ensure consistent height
 
         return `<div class="print-label">
                     <div class="label-name">${p.name || ""}</div>
@@ -539,13 +584,14 @@ export default function ProductsPage() {
                 </div>`;
       })
       .join("");
+
     printWin.document.write(
       `<html><head><title>Shtrix Kodlar (50x30mm)</title><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script><style>
       @page{size: 50mm 30mm; margin: 0mm !important;}
       html,body{width:50mm;height:30mm;margin:0 !important;padding:0;box-sizing:border-box;font-family:'Arial',sans-serif;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;background-color:#fff;overflow:hidden;}
       .print-label{width:100%;height:100%;padding: 2.5mm 2mm 1.5mm 2mm;text-align:center;display:flex;flex-direction:column;justify-content:space-between;align-items:center;box-sizing:border-box;overflow:hidden !important;page-break-after:always;}
       .label-name{font-size:9pt;font-weight:bold; margin-bottom:1mm;color:#000;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1;}
-      .label-details{width:100%;font-size:7.5pt;font-weight:normal; color:#000;text-align:center;margin-bottom:1mm;line-height:1.15;min-height: 4mm;}
+      .label-details{width:100%;font-size:7.5pt;font-weight:normal; color:#000;text-align:center;margin-bottom:1mm;line-height:1.15;min-height: 4mm; display: flex; flex-direction: column; justify-content: center;}
       .label-details-placeholder {min-height: 4mm;width: 100%;}
       .detail-item{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;line-height:1.15;}
       .label-barcode-container{width:100%;display:flex;justify-content:center;align-items:flex-end;}
@@ -565,8 +611,8 @@ export default function ProductsPage() {
       toast.error("Mahsulot ID si topilmadi.");
       return;
     }
-    if (!product.barcode) {
-        toast.info(`"${product.name}" uchun shtrix-kod mavjud emas.`);
+     if (!product.barcode || product.barcode.trim() === "") {
+        toast.info(`"${product.name}" uchun shtrix-kod mavjud emas. Chop etib bo'lmaydi.`);
         return;
     }
     setPrintingProductId(product.id);
@@ -577,13 +623,15 @@ export default function ProductsPage() {
         setPrintingProductId(null);
         return;
       }
+      // API dan yorliq uchun maxsus ma'lumotlarni olish
       const response = await axios.get<{
         name: string;
-        barcode_image_base64: string;
-        battery_health?: string;
-        series_region?: string;
+        barcode_image_base64: string; // base64 formatdagi shtrix-kod rasmi
+        battery_health?: string;      // Batareya foizi (agar bo'lsa)
+        series_region?: string;       // Seriya/Region (agar bo'lsa)
+        // Boshqa kerakli maydonlar
       }>(
-        `${API_URL_PRODUCT_OPERATIONS}${product.id}/print-label-data/`,
+        `${API_URL_PRODUCT_OPERATIONS}${product.id}/print-label-data/`, // Maxsus endpoint
         {
           headers: { Authorization: `Bearer ${token}` },
           timeout: 10000,
@@ -593,7 +641,7 @@ export default function ProductsPage() {
       const printData = response.data;
       const printWindow = window.open("", "_blank", "width=400,height=600");
       if (!printWindow) {
-        toast.error("Pop-up bloklandi. Brauzer sozlamalarini tekshiring.");
+        toast.error("Pop-up oynasi bloklangan. Brauzer sozlamalarini tekshiring.");
         setPrintingProductId(null);
         return;
       }
@@ -601,6 +649,8 @@ export default function ProductsPage() {
       const detailsArray: string[] = [];
       if (product.storage_capacity)
         detailsArray.push(`Xotira: ${product.storage_capacity}`);
+
+      // printData dan olingan ma'lumotlarga ustunlik beramiz, yo'q bo'lsa product dan olamiz
       const productType = determineProductTypeForDisplay(product);
       if (productType === "iPhone") {
         if (printData.battery_health || product.battery_health)
@@ -614,6 +664,7 @@ export default function ProductsPage() {
             product.description.length > 25 ? "..." : ""
           }`
         );
+
       const detailsHtml =
         detailsArray.length > 0
           ? `<div class="label-details">${detailsArray
@@ -627,7 +678,7 @@ export default function ProductsPage() {
         html,body{width:50mm;height:30mm;margin:0 !important;padding:0;box-sizing:border-box;font-family:'Arial',sans-serif;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;background-color:#fff;overflow:hidden;}
         .print-label{width:100%;height:100%;padding: 3mm 2mm 1.5mm 2mm;text-align:center;display:flex;flex-direction:column;justify-content:space-between;align-items:center;box-sizing:border-box;overflow:hidden !important;}
         .label-name{font-size:9pt;font-weight:bold; margin-bottom:1mm;color:#000;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1;}
-        .label-details{width:100%;font-size:7.5pt;font-weight:normal;color:#000;text-align:center;margin-bottom:1mm;line-height:1.15;min-height: 4mm;}
+        .label-details{width:100%;font-size:7.5pt;font-weight:normal;color:#000;text-align:center;margin-bottom:1mm;line-height:1.15;min-height: 4mm; display: flex; flex-direction: column; justify-content: center;}
         .label-details-placeholder {min-height: 4mm;width: 100%;}
         .detail-item{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;line-height:1.15;}
         .label-barcode-container{width:100%;display:flex;justify-content:center;align-items:flex-end;}
@@ -643,7 +694,7 @@ export default function ProductsPage() {
           "Serverga ulanishda muammo"
         }`
       );
-      console.error("API xatosi:", err);
+      console.error("Yorliq API xatosi:", err.response || err);
     } finally {
       setPrintingProductId(null);
     }
@@ -667,7 +718,7 @@ export default function ProductsPage() {
 
   const formatIdentifierForDisplay = (idStr: string | null | undefined) => {
     if (!idStr) return "-";
-    const ids = idStr.split(/[\s,;]+/).filter(Boolean);
+    const ids = idStr.split(/[\s,;]+/).filter(Boolean); // Bo'sh elementlarni olib tashlash
     if (ids.length === 0) return "-";
     if (ids.length === 1) return ids[0];
     return (
@@ -675,7 +726,7 @@ export default function ProductsPage() {
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="cursor-help underline decoration-dotted">
-              {ids[0]} ({ids.length} ta) <Info size={12} className="inline ml-1" />
+              {ids[0]} ({ids.length} ta) <Info size={12} className="inline ml-1 align-middle" />
             </span>
           </TooltipTrigger>
           <TooltipContent
@@ -700,7 +751,7 @@ export default function ProductsPage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
             Mahsulotlar
           </h1>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap justify-center sm:justify-end">
             <Button
               className="flex items-center gap-2 shadow-sm"
               onClick={() => {
@@ -765,19 +816,19 @@ export default function ProductsPage() {
           </CardHeader>
           <CardContent className="p-0 flex-grow overflow-y-auto">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-full">
+              <div className="flex flex-col items-center justify-center h-full p-6">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-3" />
                 <p>Yuklanmoqda...</p>
               </div>
             ) : error ? (
-              <div className="p-6 text-center text-destructive">
-                <p className="font-semibold">Xatolik:</p>
-                <p>{error}</p>
+              <div className="p-6 text-center text-destructive whitespace-pre-line">
+                <p className="font-semibold mb-2">Xatolik yuz berdi:</p>
+                <p className="text-sm">{error}</p>
                 <Button
                   onClick={fetchProducts}
                   variant="outline"
                   size="sm"
-                  className="mt-3"
+                  className="mt-4"
                 >
                   Qayta urinish
                 </Button>
@@ -811,7 +862,7 @@ export default function ProductsPage() {
                 <TableBody>
                   {filteredProducts.map((p) => (
                     <TableRow key={p.id} className="hover:bg-muted/50">
-                      <TableCell className="font-medium px-2 py-2.5 sm:px-4">
+                      <TableCell className="font-medium px-2 py-2.5 sm:px-4 break-all max-w-[180px]">
                         {p.name || "-"}
                       </TableCell>
                       <TableCell className="hidden xl:table-cell px-2 sm:px-4">
@@ -841,38 +892,56 @@ export default function ProductsPage() {
                         {p.color || "-"}
                       </TableCell>
                       <TableCell className="text-right px-2 py-2.5 sm:px-4">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-sky-600 hover:bg-sky-100"
-                          onClick={() => printSingleProductWithApiData(p)}
-                          title="Yorliq chop etish"
-                          disabled={printingProductId === p.id || !p.barcode}
-                        >
-                          {printingProductId === p.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Printer className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-primary hover:bg-primary/10 ml-1"
-                          onClick={() => openEditDialog(p)}
-                          title="Tahrirlash"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:bg-destructive/10 ml-1"
-                          onClick={() => openDeleteDialog(p)}
-                          title="Arxivlash"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-sky-600 hover:bg-sky-100"
+                              onClick={() => printSingleProductWithApiData(p)}
+                              disabled={printingProductId === p.id || !p.barcode || p.barcode.trim() === ""}
+                            >
+                              {printingProductId === p.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Printer className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Yorliq chop etish</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-primary hover:bg-primary/10 ml-1"
+                              onClick={() => openEditDialog(p)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Tahrirlash</p>
+                          </TooltipContent>
+                        </Tooltip>
+                         <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:bg-destructive/10 ml-1"
+                              onClick={() => openDeleteDialog(p)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Arxivlash</p>
+                          </TooltipContent>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -888,23 +957,25 @@ export default function ProductsPage() {
                 </p>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-xs">
                   {search
-                    ? "Boshqa kalit so'z bilan qidirib ko'ring."
+                    ? "Boshqa kalit so'z bilan qidirib ko'ring yoki qidiruvni tozalang."
                     : "Yangi mahsulot qo'shish uchun yuqoridagi tugmalardan foydalaning."}
                 </p>
               </div>
             )}
           </CardContent>
         </Card>
+
         {isAddProductDialogOpen && (
           <AddProductDialog
             open={isAddProductDialogOpen}
             onOpenChange={setIsAddProductDialogOpen}
-            onAddProduct={handleProductAdded}
+            onAddProduct={handleProductAdded} // handleProductAdded ga yangi mahsulotni qaytarishi kerak
             initialView={addDialogInitialView}
+            // categories={categories} // Agar AddProductDialog'ga kategoriyalar kerak bo'lsa
           />
         )}
         {isEditDialogOpen && selectedProductForEdit && (
-          <EditProductDialog // Bu komponentni ham yaratishingiz kerak
+          <EditProductDialog
             open={isEditDialogOpen}
             onOpenChange={(isOpen) => {
               setIsEditDialogOpen(isOpen);
@@ -912,8 +983,10 @@ export default function ProductsPage() {
             }}
             product={selectedProductForEdit}
             onProductSuccessfullyEdited={handleProductSuccessfullyEdited}
+            // categories={categories} // Agar EditProductDialog'ga kategoriyalar kerak bo'lsa
           />
         )}
+
         <ShadDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
@@ -922,9 +995,9 @@ export default function ProductsPage() {
             <ShadDialogHeader>
               <ShadDialogTitle>Arxivlashni Tasdiqlang</ShadDialogTitle>
               <ShadDialogDescription className="mt-2">
-                {productToDelete
-                  ? `"${productToDelete.name}"ni arxivlaysizmi?`
-                  : "Mahsulotni arxivlash."}
+                Haqiqatan ham{" "}
+                <strong>"{productToDelete?.name || "tanlangan mahsulot"}"</strong>ni
+                arxivlamoqchimisiz? Bu amalni orqaga qaytarish mumkin.
               </ShadDialogDescription>
             </ShadDialogHeader>
             <ShadDialogFooter className="mt-5">
@@ -935,7 +1008,7 @@ export default function ProductsPage() {
                   setProductToDelete(null);
                 }}
               >
-                Bekor
+                Bekor qilish
               </Button>
               <Button variant="destructive" onClick={handleDeleteConfirmation}>
                 Ha, Arxivlash
@@ -943,23 +1016,20 @@ export default function ProductsPage() {
             </ShadDialogFooter>
           </ShadDialogContent>
         </ShadDialog>
+
         <ShadDialog
           open={isAddCategoryModalOpen}
           onOpenChange={(isOpen) => {
             setIsAddCategoryModalOpen(isOpen);
             if (!isOpen)
-              setNewCategoryData({
-                name: "",
-                description: "",
-                barcode_prefix: "",
-              });
+              setNewCategoryData({ name: "", description: "", barcode_prefix: "" });
           }}
         >
           <ShadDialogContent className="sm:max-w-md">
             <ShadDialogHeader>
-              <ShadDialogTitle>Yangi Kategoriya</ShadDialogTitle>
+              <ShadDialogTitle>Yangi Kategoriya Qo'shish</ShadDialogTitle>
               <ShadDialogDescription>
-                Yangi kategoriya kiriting.
+                Yangi mahsulot kategoriyasini kiriting.
               </ShadDialogDescription>
             </ShadDialogHeader>
             <div className="grid gap-4 py-4">
@@ -971,12 +1041,10 @@ export default function ProductsPage() {
                   id="catName"
                   value={newCategoryData.name}
                   onChange={(e) =>
-                    setNewCategoryData({
-                      ...newCategoryData,
-                      name: e.target.value,
-                    })
+                    setNewCategoryData({ ...newCategoryData, name: e.target.value })
                   }
                   className="col-span-3"
+                  autoFocus
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -987,10 +1055,7 @@ export default function ProductsPage() {
                   id="catDesc"
                   value={newCategoryData.description}
                   onChange={(e) =>
-                    setNewCategoryData({
-                      ...newCategoryData,
-                      description: e.target.value,
-                    })
+                    setNewCategoryData({ ...newCategoryData, description: e.target.value })
                   }
                   className="col-span-3"
                 />
@@ -1003,13 +1068,10 @@ export default function ProductsPage() {
                   id="catPrefix"
                   value={newCategoryData.barcode_prefix}
                   onChange={(e) =>
-                    setNewCategoryData({
-                      ...newCategoryData,
-                      barcode_prefix: e.target.value,
-                    })
+                    setNewCategoryData({ ...newCategoryData, barcode_prefix: e.target.value })
                   }
                   className="col-span-3"
-                  placeholder="Ixtiyoriy"
+                  placeholder="Masalan, 200 (ixtiyoriy)"
                 />
               </div>
             </div>
@@ -1018,18 +1080,14 @@ export default function ProductsPage() {
                 variant="outline"
                 onClick={() => {
                   setIsAddCategoryModalOpen(false);
-                  setNewCategoryData({
-                    name: "",
-                    description: "",
-                    barcode_prefix: "",
-                  });
+                  setNewCategoryData({ name: "", description: "", barcode_prefix: "" });
                 }}
               >
                 Bekor
               </Button>
               <Button
                 onClick={handleSaveNewCategory}
-                disabled={isSubmittingCategory}
+                disabled={isSubmittingCategory || !newCategoryData.name.trim()}
               >
                 {isSubmittingCategory ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1039,12 +1097,14 @@ export default function ProductsPage() {
             </ShadDialogFooter>
           </ShadDialogContent>
         </ShadDialog>
+
         <ShadDialog open={isPrintModalOpen} onOpenChange={setIsPrintModalOpen}>
           <ShadDialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
             <ShadDialogHeader>
-              <ShadDialogTitle>Ommaviy Chop Etish (50x30mm)</ShadDialogTitle>
+              <ShadDialogTitle>Ommaviy Chop Etish (Yorliqlar 50x30mm)</ShadDialogTitle>
               <ShadDialogDescription>
-                Chop etish uchun mahsulotlarni tanlang. (Narx va shtrix raqami yorliqda ko'rsatilmaydi)
+                Chop etish uchun mahsulotlarni tanlang. Faqat shtrix-kodi mavjud mahsulotlar ko'rsatiladi.
+                (Narx va shtrix raqami yorliqda ko'rsatilmaydi)
               </ShadDialogDescription>
             </ShadDialogHeader>
             <div className="my-4 flex items-center space-x-2">
@@ -1057,12 +1117,13 @@ export default function ProductsPage() {
                   )
                 }
                 onCheckedChange={(c) => handleSelectAllForPrint(Boolean(c))}
+                disabled={eligibleProductsForPrint.length === 0}
               />
-              <Label htmlFor="selectAllPrint">
-                Hammasini tanlash ({getSelectedItemsForActualPrint().length} ta)
+              <Label htmlFor="selectAllPrint" className={eligibleProductsForPrint.length === 0 ? "cursor-not-allowed text-muted-foreground" : ""}>
+                Hammasini tanlash ({getSelectedItemsForActualPrint().length} / {eligibleProductsForPrint.length} ta)
               </Label>
             </div>
-            <div className="flex-grow overflow-auto p-1 bg-muted/30 rounded-md border">
+            <div className="flex-grow overflow-auto p-1 bg-muted/30 rounded-md border min-h-[200px]">
               {eligibleProductsForPrint.length > 0 ? (
                 <div className="space-y-2 p-2">
                   {eligibleProductsForPrint.map((p) => (
@@ -1074,19 +1135,20 @@ export default function ProductsPage() {
                         id={`pc-${p.id}`}
                         checked={!!selectedProductsToPrint[p.id]}
                         onCheckedChange={() => handleTogglePrintSelection(p.id)}
-                        className="h-5 w-5"
+                        className="h-5 w-5 shrink-0"
                       />
                       <Label
                         htmlFor={`pc-${p.id}`}
-                        className="flex-grow cursor-pointer flex justify-between items-center"
+                        className="flex-grow cursor-pointer flex justify-between items-center gap-2"
                       >
-                        <div>
-                          <div className="font-semibold text-sm">{p.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {p.storage_capacity && `${p.storage_capacity}`}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm truncate" title={p.name}>{p.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {p.storage_capacity && `Xot: ${p.storage_capacity}`}
                             {determineProductTypeForDisplay(p) === "iPhone" &&
                               p.battery_health &&
                               ` | Bat: ${p.battery_health}%`}
+                              {p.barcode && ` | Kod: ${p.barcode.length > 15 ? p.barcode.substring(0,12) + "..." : p.barcode }`}
                           </div>
                         </div>
                         <div className="w-32 h-12 flex items-center justify-center border rounded-sm bg-white p-0.5 ml-2 shrink-0">
@@ -1106,8 +1168,8 @@ export default function ProductsPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-center text-muted-foreground py-6">
-                  Mos mahsulotlar yo'q.
+                <p className="text-center text-muted-foreground py-10">
+                  Chop etish uchun mos mahsulotlar yo'q.
                 </p>
               )}
             </div>
@@ -1120,13 +1182,11 @@ export default function ProductsPage() {
                 disabled={getSelectedItemsForActualPrint().length === 0}
               >
                 <Printer className="mr-2 h-4 w-4" />
-                Tanlanganlarni Chop etish (
-                {getSelectedItemsForActualPrint().length})
+                Tanlanganlarni Chop etish ({getSelectedItemsForActualPrint().length})
               </Button>
             </ShadDialogFooter>
           </ShadDialogContent>
         </ShadDialog>
-        {/* Global stillar kerak bo'lsa, bu yerga yoki alohida CSS fayliga qo'shing */}
       </div>
     </TooltipProvider>
   );

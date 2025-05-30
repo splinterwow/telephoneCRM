@@ -97,15 +97,6 @@ export function Sidebar({ className }: SidebarProps) {
             collapsed={collapsed}
             active={location.pathname === "/reports"}
           />
-          
-          {/* Muddatli tolov */}
-          {/* <SidebarLink
-            to="/installments"
-            icon={<CreditCard />}
-            label="Muddatli to'lovlar"
-            collapsed={collapsed}
-            active={location.pathname.startsWith("/installments")}
-          /> */}
           <SidebarLink
             to="/employees"
             icon={<Users />}

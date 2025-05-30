@@ -20,7 +20,6 @@ const API_URL_PRODUCTS = "https://smartphone777.pythonanywhere.com/api/products/
 
 interface EditFormData {
   name: string;
-  // barcode: string; // Shtrix kod olib tashlandi
   purchaseDate: string;
 
   phonePurchasePriceUsd: string;
@@ -57,7 +56,6 @@ interface Product {
 
 const initialFormData: EditFormData = {
   name: "",
-  // barcode: "", // Shtrix kod olib tashlandi
   purchaseDate: new Date().toISOString().split("T")[0],
 
   phonePurchasePriceUsd: "",

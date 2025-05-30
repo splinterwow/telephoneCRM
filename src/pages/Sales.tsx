@@ -1,193 +1,330 @@
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Search } from "lucide-react";
+import { 
+  Table, 
+  TableHeader, 
+  TableRow, 
+  TableHead, 
+  TableBody, 
+  TableCell 
+} from "@/components/ui/table";
+import { Search, Package, CalendarDays, UserCircle, Home, CheckCircle, Clock, AlertTriangle } from "lucide-react"; // Ikonkalar
 import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 
-const SALES_API_URL = "https://smartphone777.pythonanywhere.com/api/sales/"; // API endpoint
+const SALES_API_URL = "https://smartphone777.pythonanywhere.com/api/sales/";
 
-// Sotuv interfeysi
-interface SaleItem {
+interface SoldItemDetail {
+  id: number;
   product_name: string;
   quantity: number;
+  price_per_item_currency: string;
+  barcode?: string | null;
 }
 
 interface Sale {
   id: number;
   seller_username: string;
-  customer_name: string;
+  customer_name: string | null;
   kassa_name: string;
   currency: string;
-  total_amount_currency: string;
+  final_amount_currency: string;
+  amount_actually_paid_at_sale?: string;
   payment_type: string;
   payment_type_display: string;
-  status: string;
+  status: string; // Masalan: "Completed", "Pending", "Cancelled"
   status_display: string;
   created_at: string;
-  items_count: number;
-  items: SaleItem[];
+  items_count?: number;
+  items: SoldItemDetail[];
 }
 
-export default function Sales() {
+export default function SalesPage() {
   const [search, setSearch] = useState("");
   const [salesData, setSalesData] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [totalSales, setTotalSales] = useState(0);
 
-  // Tokenni olish funksiyasi
   const getAuthHeaders = () => {
-    let accessToken = localStorage.getItem("accessToken");
+    const accessToken = localStorage.getItem("accessToken");
     if (!accessToken) {
-      throw new Error("Sessiya topilmadi. Iltimos, tizimga qayta kiring.");
+      throw new Error("Avtorizatsiya tokeni topilmadi. Iltimos, tizimga qayta kiring.");
     }
-
-    return {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
+    return { 
+      Authorization: `Bearer ${accessToken}`, 
+      "Content-Type": "application/json" 
     };
   };
 
-  // API'dan sotuvlar ro'yxatini olish
-  const fetchSales = async () => {
+  const fetchSales = async (searchTerm: string = search) => {
+    setLoading(true);
+    setError(null);
+    setTotalSales(0); 
     try {
       const headers = getAuthHeaders();
-      setLoading(true);
-      setError(null);
-
       const url = new URL(SALES_API_URL);
-      if (search) {
-        url.searchParams.append("search", search);
+      if (searchTerm.trim()) {
+        url.searchParams.append("search", searchTerm.trim());
       }
+      // Paginatsiya uchun (agar backend qo'llab-quvvatlasa)
+      // url.searchParams.append("page", currentPage.toString());
+      // url.searchParams.append("page_size", "15");
 
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers,
-      });
+
+      const response = await fetch(url.toString(), { method: "GET", headers });
 
       if (!response.ok) {
         if (response.status === 401) {
-          throw new Error("Ruxsat berilmagan. Iltimos, tizimga qayta kiring.");
+          throw new Error("Ruxsat berilmagan. Sessiya muddati tugagan bo'lishi mumkin. Qayta kiring.");
         }
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Sotuvlarni olishda xato yuz berdi.");
+        const errorData = await response.json().catch(() => ({ detail: "Serverdan noma'lum xato." }));
+        throw new Error(errorData.detail || `Sotuvlarni yuklashda xatolik (status: ${response.status}).`);
       }
 
       const data = await response.json();
-      console.log("API javobi:", data); // API javobini tekshirish uchun log qilamiz
+      console.log("API Response (Sales List):", data);
 
-      if (Array.isArray(data)) {
-        setSalesData(data);
-      } else if (Array.isArray(data.results)) {
-        setSalesData(data.results);
-      } else {
-        setSalesData([]);
+      const fetchedSales = Array.isArray(data) ? data : (data.results && Array.isArray(data.results)) ? data.results : [];
+      
+      const validatedSales = fetchedSales.map(sale => ({
+        ...sale,
+        items: (sale.items && Array.isArray(sale.items)) ? sale.items : [],
+      }));
+
+      setSalesData(validatedSales);
+      if (data && typeof data.count === 'number') {
+        setTotalSales(data.count);
+      } else if (Array.isArray(data)) {
+        setTotalSales(data.length)
       }
+
     } catch (err: any) {
       setError(err.message);
-      toast.error(err.message);
-      if (err.message.includes("Ruxsat berilmagan")) {
-        window.location.href = "/login";
+      toast.error(`Xatolik: ${err.message}`, { duration: 5000 });
+      if (err.message.includes("Avtorizatsiya") || err.message.includes("Ruxsat berilmagan")) {
+        console.error("Avtorizatsiya xatosi, loginga yo'naltirish kerak.");
+        // Ideal holda: router.push('/login') yoki authContext.logout()
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Komponent yuklanganda va qidiruv o'zgarganda sotuvlarni olish
   useEffect(() => {
-    fetchSales();
+    const delayDebounceFn = setTimeout(() => {
+      fetchSales(search);
+    }, 500); 
+
+    return () => clearTimeout(delayDebounceFn);
   }, [search]);
 
-  // Sana formatini DD/MM/YYYY ga o'zgartirish
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0"); // Oy 0 dan boshlanadi
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+  useEffect(() => {
+    fetchSales(); 
+  }, []);
+
+
+  const formatDateWithTime = (dateString: string): string => {
+    if (!dateString) return "N/A";
+    try {
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      const hours = String(date.getHours()).padStart(2, "0");
+      const minutes = String(date.getMinutes()).padStart(2, "0");
+      return `${day}.${month}.${year} ${hours}:${minutes}`; // Nuqta bilan ajratilgan format
+    } catch (e) {
+      return "Noto'g'ri sana";
+    }
   };
 
-  // Valyutani formatlash
-  const formatCurrency = (currency: string): string => {
-    return currency === "UZS" ? "So'm" : currency;
+  const formatAmountWithCurrency = (amountStr?: string | null, currencyCode?: string | null): string => {
+    if (amountStr === null || amountStr === undefined || amountStr.trim() === "") return "-"; // N/A o'rniga chiziqcha
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount)) return "-";
+
+    const code = (currencyCode || "UZS").toUpperCase();
+
+    try {
+      if (code === "UZS") {
+        return new Intl.NumberFormat("uz-UZ", { style: "decimal", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount); // " so'm" ni olib tashladim, valyuta alohida ustunda
+      } else if (code === "USD") {
+        return new Intl.NumberFormat("en-US", { style: "decimal", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount); // "$" ni olib tashladim
+      }
+      return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } catch (e) {
+      return amountStr;
+    }
   };
+  
+  const getStatusIconAndColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "completed":
+      case "yakunlangan":
+        return { icon: <CheckCircle size={14} className="text-green-600" />, color: "text-green-700 bg-green-100 border-green-200" };
+      case "pending":
+      case "kutilmoqda":
+        return { icon: <Clock size={14} className="text-yellow-600" />, color: "text-yellow-700 bg-yellow-100 border-yellow-200" };
+      case "cancelled":
+      case "bekor qilingan":
+        return { icon: <AlertTriangle size={14} className="text-red-600" />, color: "text-red-700 bg-red-100 border-red-200" };
+      default:
+        return { icon: null, color: "text-gray-700 bg-gray-100 border-gray-200" };
+    }
+  };
+
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-bold gradient-heading">Sotuvlar</h1>
-      </div>
+    <TooltipProvider>
+      <div className="p-4 md:p-6 space-y-6 bg-gray-50 min-h-screen">
+        <header className="mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Sotuvlar Tarixi</h1>
+          <p className="text-sm text-gray-500 mt-1">Barcha sotuv operatsiyalarini ko'rish va boshqarish.</p>
+        </header>
 
-      <div className="flex flex-col md:flex-row gap-4 justify-between">
-        <div className="relative md:w-96">
+        <div className="relative w-full md:max-w-lg mb-6"> {/* Qidiruv input kengligi */}
           <Input
-            placeholder="Qidirish (mijoz, kassa, sotuvchi)"
+            placeholder="Qidirish (ID, Mijoz, Mahsulot nomi/shtrix-kodi, Sotuvchi, Kassa...)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 pr-4 py-2.5 text-sm border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
           />
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
         </div>
-      </div>
 
-      <Card className="card-gradient">
-        <CardHeader>
-          <CardTitle>Sotuvlar ro'yxati</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mijoz</TableHead>
-                <TableHead>Sana</TableHead>
-                <TableHead>To'lov usuli</TableHead>
-                <TableHead>Valyuta</TableHead>
-                <TableHead>Holati</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10">
-                    <p className="text-muted-foreground">Yuklanmoqda...</p>
-                  </TableCell>
-                </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10">
-                    <p className="text-red-600">{error}</p>
-                  </TableCell>
-                </TableRow>
-              ) : salesData.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10">
-                    <p className="text-muted-foreground">Sotuvlar topilmadi</p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                salesData.map((sale) => (
-                  <TableRow key={sale.id}>
-                    <TableCell>{sale.customer_name || "Noma'lum"}</TableCell>
-                    <TableCell>{formatDate(sale.created_at)}</TableCell>
-                    <TableCell>{sale.payment_type_display || "Noma'lum"}</TableCell>
-                    <TableCell>{formatCurrency(sale.currency || "UZS")}</TableCell>
-                    <TableCell
-                      className={
-                        sale.status_display === "Yakunlandi"
-                          ? "text-green-600 font-semibold"
-                          : "text-gray-700"
-                      }
-                    >
-                      {sale.status_display || "Noma'lum"}
-                    </TableCell>
+        <Card className="shadow-xl border border-gray-200 rounded-lg overflow-hidden">
+          <CardHeader className="bg-gray-100 border-b border-gray-200 px-6 py-4">
+            <CardTitle className="text-lg font-semibold text-gray-700">
+              Sotuvlar ro'yxati {totalSales > 0 && !loading && `(Jami: ${totalSales} ta)`}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table className="min-w-[1200px]"> {/* Jadval minimal kengligi yangi ustunlar uchun */}
+                <TableHeader className="bg-gray-50 sticky top-0 z-10">
+                  <TableRow>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[80px]">ID</TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[150px]">Mijoz</TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[300px]">Mahsulotlar</TableHead>
+                    <TableHead className="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Summa</TableHead>
+                    <TableHead className="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[80px]">Valyuta</TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">To'lov Usuli</TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[150px]">Sana va Vaqt</TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Sotuvchi</TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px]">Kassa</TableHead>
+                    <TableHead className="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[120px]">Holati</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+                </TableHeader>
+                <TableBody className="bg-white divide-y divide-gray-200">
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-16 text-gray-500">
+                        <div className="flex flex-col justify-center items-center space-y-2">
+                          <svg className="animate-spin h-8 w-8 text-primary-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span className="text-sm">Yuklanmoqda, iltimos kuting...</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : error ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-16 text-red-600 font-medium">
+                        Xatolik: {error}
+                        <Button onClick={() => fetchSales(search)} variant="link" size="sm" className="ml-2 text-red-600 underline">Qayta urinish</Button>
+                      </TableCell>
+                    </TableRow>
+                  ) : salesData.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-16 text-gray-500">
+                        <Package size={32} className="mx-auto mb-2 text-gray-400"/>
+                        {search ? `"${search}" uchun sotuvlar topilmadi.` : "Hozircha sotuvlar mavjud emas."}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    salesData.map((sale) => {
+                      const statusStyle = getStatusIconAndColor(sale.status);
+                      return (
+                        <TableRow key={sale.id} className="hover:bg-gray-50/50 transition-colors duration-150">
+                          <TableCell className="px-3 py-3 text-sm text-gray-700 font-medium whitespace-nowrap">#{sale.id}</TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <UserCircle size={16} className="mr-1.5 text-gray-400"/>
+                              {sale.customer_name || <span className="italic text-gray-400">Noma'lum mijoz</span>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-600 max-w-xs">
+                            {sale.items && sale.items.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {sale.items.map((item, index) => (
+                                  <div key={item.id || index} className="flex items-start text-xs" title={`${item.product_name} (${item.quantity} dona) - ${formatAmountWithCurrency(item.price_per_item_currency, sale.currency)} ${item.barcode ? `[${item.barcode}]` : ''}`}>
+                                    <Package size={14} className="inline mr-1.5 text-blue-500 flex-shrink-0 mt-0.5" />
+                                    <div className="flex-grow">
+                                      <span className="font-medium text-gray-700 block truncate">{item.product_name}</span>
+                                      <span className="text-gray-500"> ({item.quantity} dona)</span>
+                                      {item.barcode && (
+                                        <Tooltip delayDuration={50}>
+                                          <TooltipTrigger asChild>
+                                            <span className="ml-1 text-gray-400 cursor-help bg-gray-100 px-1.5 py-0.5 rounded-sm text-[0.65rem] leading-none">
+                                              #{item.barcode.length > 7 ? item.barcode.substring(0,6) + '…' : item.barcode}
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="bg-slate-800 text-white text-xs p-1.5 rounded shadow-lg">
+                                            <p>Shtrix-kod: {item.barcode}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="italic text-gray-400">Mahsulotlar yo'q</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-800 font-semibold text-right whitespace-nowrap">
+                            {formatAmountWithCurrency(sale.final_amount_currency, sale.currency)}
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-600 text-center whitespace-nowrap">{sale.currency}</TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">{sale.payment_type_display || "N/A"}</TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            <div className="flex items-center">
+                               <CalendarDays size={14} className="mr-1.5 text-gray-400"/>
+                               {formatDateWithTime(sale.created_at)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">{sale.seller_username || "N/A"}</TableCell>
+                          <TableCell className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">
+                            <div className="flex items-center">
+                               <Home size={14} className="mr-1.5 text-gray-400"/>
+                               {sale.kassa_name || "N/A"}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-3 py-3 text-sm font-medium text-center whitespace-nowrap">
+                            <span className={`px-2.5 py-1 inline-flex items-center text-xs leading-5 font-semibold rounded-full shadow-sm border ${statusStyle.color}`}>
+                              {statusStyle.icon && <span className="mr-1">{statusStyle.icon}</span>}
+                              {sale.status_display || "Noma'lum"}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
   );
 }

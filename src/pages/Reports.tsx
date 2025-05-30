@@ -1,9 +1,43 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
-import { ChevronLeft, ChevronRight, Search, Loader2, ArrowDownCircle, ArrowUpCircle, MinusCircle } from "lucide-react"; // Qo'shimcha ikonlar
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Loader2,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  MinusCircle,
+  Inbox, // Bo'sh holat uchun ikonka
+} from "lucide-react";
+
+// Shadcn/ui komponentlari
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const API_URL_INVENTORY_HISTORY = "https://smartphone777.pythonanywhere.com/api/inventory/history/";
 
+// Sana formatlash funksiyasi
 const formatDate = (isoString) => {
   if (!isoString) return "-";
   try {
@@ -15,75 +49,78 @@ const formatDate = (isoString) => {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
-    }).format(date).replace(',', ''); // Vergulni olib tashlash
+    }).format(date).replace(',', '');
   } catch (e) {
     console.error("Sana formatlashda xato:", e);
     return isoString;
   }
 };
 
-// Miqdor va operatsiya turi uchun ikonka va rang qaytaruvchi funksiya
-const getOperationVisuals = (quantity, operationTypeDisplay) => {
+// Operatsiya uchun vizual elementlar
+const getOperationVisuals = (quantity) => {
   if (quantity < 0) {
     return {
-      icon: <ArrowDownCircle className="h-5 w-5 text-red-500 inline mr-1" />,
-      quantityClass: "text-red-600 font-semibold",
+      icon: <ArrowDownCircle className="h-5 w-5 text-destructive inline mr-1.5" />,
+      quantityClass: "text-destructive font-medium",
       text: quantity,
-      rowClass: "bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-800/40",
+      rowClass: "hover:bg-destructive/5 dark:hover:bg-destructive/10 transition-colors duration-150",
     };
   } else if (quantity > 0) {
-    // "Boshlang'ich qoldiq" yoki "Qo'shish (Kirim)" kabi operatsiyalar
     return {
-      icon: <ArrowUpCircle className="h-5 w-5 text-green-500 inline mr-1" />,
-      quantityClass: "text-green-600 font-semibold",
+      icon: <ArrowUpCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-500 inline mr-1.5" />,
+      quantityClass: "text-emerald-600 dark:text-emerald-500 font-medium",
       text: `+${quantity}`,
-      rowClass: "bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-800/40",
+      rowClass: "hover:bg-emerald-500/5 dark:hover:bg-emerald-500/10 transition-colors duration-150",
     };
   }
-  // Agar miqdor 0 bo'lsa (kamdan-kam uchraydi, lekin himoya uchun)
   return {
-    icon: <MinusCircle className="h-5 w-5 text-gray-500 inline mr-1" />,
-    quantityClass: "text-gray-700 dark:text-gray-300",
+    icon: <MinusCircle className="h-5 w-5 text-muted-foreground inline mr-1.5" />,
+    quantityClass: "text-muted-foreground",
     text: quantity,
-    rowClass: "hover:bg-gray-50 dark:hover:bg-gray-750",
+    rowClass: "hover:bg-muted/30 dark:hover:bg-muted/20 transition-colors duration-150",
   };
 };
-
 
 export default function InventoryHistoryPage() {
   const [historyData, setHistoryData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPageUrl, setCurrentPageUrl] = useState(API_URL_INVENTORY_HISTORY);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const fetchInventoryHistory = useCallback(async (url, currentSearchTerm) => {
+  const fetchInventoryHistory = useCallback(async (page, currentSearchTerm) => {
     setIsLoading(true);
     setError(null);
+    let url = `${API_URL_INVENTORY_HISTORY}?page=${page}`;
+    if (currentSearchTerm) {
+      url += `&search=${encodeURIComponent(currentSearchTerm)}`;
+    }
+
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) {
-        setError("Iltimos, tizimga kiring.");
+        setError("Avtorizatsiya qilinmagan. Iltimos, tizimga kiring.");
+        // TODO: Foydalanuvchini login sahifasiga yo'naltirish (masalan, useNavigate bilan)
         setIsLoading(false);
         return;
       }
 
       const response = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { search: currentSearchTerm || undefined }, // Agar search term bo'sh bo'lsa, parametrni jo'natmaymiz
-        timeout: 15000,
+        timeout: 20000,
       });
       setHistoryData(response.data);
     } catch (err) {
       console.error("Inventar harakatlari API xatosi:", err);
       if (err.response?.status === 401) {
         setError("Sessiya muddati tugagan. Iltimos, tizimga qayta kiring.");
-      } else if (err.code === "ECONNABORTED") {
-        setError("So‘rov muddati tugadi. Internetni tekshiring.");
+        // TODO: Login sahifasiga yo'naltirish
+      } else if (err.code === "ECONNABORTED" || err.message.includes("timeout")) {
+        setError("Serverga ulanishda vaqt tugadi. Internet aloqasini tekshiring yoki keyinroq urinib ko'ring.");
       } else {
         setError(
-          "Ma'lumotlarni olishda xato: " +
-            (err.response?.data?.detail || err.message || "Noma'lum xato")
+          "Ma'lumotlarni yuklashda xatolik: " +
+            (err.response?.data?.detail || err.response?.data?.message || err.message || "Noma'lum server xatosi.")
         );
       }
     } finally {
@@ -91,191 +128,227 @@ export default function InventoryHistoryPage() {
     }
   }, []);
 
-
   useEffect(() => {
-    // Debounce uchun
     const handler = setTimeout(() => {
-      // Qidiruv termini o'zgarganda, URLni qayta tiklaymiz (faqat search parametri bilan)
-      // Sahifa o'zgarganda esa, currentPageUrl allaqachon to'g'ri bo'ladi
-      const urlToFetch = searchTerm && currentPageUrl.includes('?page=') // Agar pagination bo'lsa
-        ? `${API_URL_INVENTORY_HISTORY}?search=${encodeURIComponent(searchTerm)}&${currentPageUrl.split('?')[1]}`
-        : `${API_URL_INVENTORY_HISTORY}?search=${encodeURIComponent(searchTerm)}`;
-
-      fetchInventoryHistory(searchTerm ? urlToFetch : currentPageUrl, searchTerm);
-
-    }, 500); // 500ms kutish
+      fetchInventoryHistory(currentPage, searchTerm);
+    }, 500); // Debounce uchun 500ms kutish
 
     return () => clearTimeout(handler);
-  }, [currentPageUrl, searchTerm, fetchInventoryHistory]);
-
+  }, [currentPage, searchTerm, fetchInventoryHistory]);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    // Qidiruv o'zgarganda birinchi sahifaga o'tkazish uchun URLni yangilaymiz,
-    // lekin useEffect ichida to'liq URL tuziladi.
-    setCurrentPageUrl(API_URL_INVENTORY_HISTORY);
+    setCurrentPage(1); // Qidiruv o'zgarganda birinchi sahifaga qaytish
   };
 
-
-  const handlePageChange = (url) => {
-    if (url) {
-      setCurrentPageUrl(url); // useEffect buni ushlab, fetchInventoryHistoryni chaqiradi
+  const handlePageChange = (direction) => {
+    if (direction === "next" && historyData?.next) {
+      const nextPageParams = new URL(historyData.next).searchParams;
+      setCurrentPage(Number(nextPageParams.get('page')) || currentPage + 1);
+    } else if (direction === "prev" && historyData?.previous) {
+      const prevPageParams = new URL(historyData.previous).searchParams;
+      setCurrentPage(Number(prevPageParams.get('page')) || currentPage - 1);
     }
   };
 
+  const itemsPerPage = useMemo(() => {
+    // API javobidan `page_size` ni olishga harakat qilish mumkin
+    // Hozircha `results` uzunligiga qarab yoki default qiymat
+    return historyData?.results?.length || 10; 
+  }, [historyData]);
 
-  if (isLoading && !historyData) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
-        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-        <p className="ml-3 text-lg text-gray-700 dark:text-gray-300">Yuklanmoqda...</p>
-      </div>
-    );
-  }
-
-  if (error && !historyData) { // Faqat boshlang'ich yuklashdagi xato uchun to'liq ekran
-    return (
-      <div className="text-center text-red-700 bg-red-100 dark:bg-red-900 dark:text-red-300 p-6 rounded-lg shadow-md mt-10 max-w-md mx-auto">
-        <h2 className="text-xl font-semibold mb-2">Xatolik!</h2>
-        <p>{error}</p>
-        <button
-          onClick={() => {
-            setSearchTerm(""); // Qidiruvni tozalash
-            setCurrentPageUrl(API_URL_INVENTORY_HISTORY); // useEffect qayta chaqiriladi
-          }}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          Qayta urinish
-        </button>
-      </div>
-    );
-  }
+  const pageInfo = useMemo(() => {
+    if (!historyData || !historyData.count) return { current: '-', total: '-', totalItems: 0 };
+    const totalPages = Math.ceil(historyData.count / itemsPerPage);
+    return { current: currentPage, total: totalPages > 0 ? totalPages : 1, totalItems: historyData.count };
+  }, [historyData, currentPage, itemsPerPage]);
 
   const items = historyData?.results || [];
+  const startingItemNumber = (currentPage - 1) * itemsPerPage + 1;
+
+  // Boshlang'ich yuklanish holati
+  if (isLoading && !historyData && !error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-3 text-lg text-muted-foreground">Yuklanmoqda...</p>
+      </div>
+    );
+  }
+
+  // Boshlang'ich yuklashda xatolik
+  if (error && !historyData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-background p-6">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-destructive text-center text-xl">Xatolik Yuz Berdi!</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-sm text-destructive-foreground">{error}</p>
+            <Button
+              onClick={() => {
+                setError(null);
+                setSearchTerm("");
+                setCurrentPage(1);
+                // fetchInventoryHistory(1, ""); // useEffect buni o'zi chaqiradi
+              }}
+            >
+              Qayta urinish
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-4 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      <div className="max-w-full xl:max-w-7xl mx-auto"> {/* Kengroq container */}
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">
-            Inventar Harakatlari
-          </h1>
-          <div className="relative w-full sm:w-auto">
-            <input
-              type="text"
-              placeholder="Mahsulot, izoh, foydalanuvchi..."
-              value={searchTerm}
-              onChange={handleSearchChange}
-              className="pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-72 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
-            />
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
-          </div>
-        </div>
-
-        {/* Ma'lumotlar yuklanayotganda yoki xatolik bo'lganda (lekin data allaqachon bor bo'lsa) ko'rsatiladigan indikator/xabar */}
-        {isLoading && historyData && (
-          <div className="flex justify-center my-4">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          </div>
-        )}
-        {error && historyData && ( // Agar data bor va yangilashda xato bo'lsa
-           <div className="my-4 p-3 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 rounded-md text-center">
-             Xatolik: {error}
-             <button
-                onClick={() => fetchInventoryHistory(currentPageUrl, searchTerm)}
-                className="ml-2 px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-             >
-                Qayta urinish
-             </button>
-           </div>
-        )}
-
-
-        <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
-              <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-700 sticky top-0 z-10">
-                <tr>
-                  <th scope="col" className="px-5 py-3.5 whitespace-nowrap w-[5%]">№</th>
-                  <th scope="col" className="px-5 py-3.5 whitespace-nowrap w-[25%]">Mahsulot</th>
-                  <th scope="col" className="px-3 py-3.5 text-center whitespace-nowrap w-[10%]">Miqdor</th>
-                  <th scope="col" className="px-5 py-3.5 whitespace-nowrap w-[15%]">Operatsiya</th>
-                  <th scope="col" className="px-5 py-3.5 whitespace-nowrap w-[10%]">Kassa</th>
-                  <th scope="col" className="px-5 py-3.5 whitespace-nowrap w-[10%]">Foydalanuvchi</th>
-                  <th scope="col" className="px-5 py-3.5 min-w-[200px] w-[20%]">Izoh</th>
-                  <th scope="col" className="px-5 py-3.5 text-right whitespace-nowrap w-[10%]">Sana</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {items.length > 0 ? (
-                  items.map((item, index) => {
-                    const visuals = getOperationVisuals(item.quantity, item.operation_type_display);
-                    const startingIndex = historyData?.previous ? (parseInt(new URL(historyData.previous).searchParams.get('page') || '0') * (historyData.results.length)) : 0;
-
-                    return (
-                      <tr key={item.id} className={`${visuals.rowClass} transition-colors duration-150`}>
-                        <td className="px-5 py-4 text-gray-500 dark:text-gray-400">
-                            {startingIndex + index + 1}
-                        </td>
-                        <td className="px-5 py-4 font-medium text-gray-900 dark:text-white">
-                          <div className="font-semibold">{item.product?.name || "Noma'lum"}</div>
-                          {item.product?.category_name && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400">{item.product.category_name}</div>
-                          )}
-                           {item.product?.barcode && (
-                            <div className="text-xs text-gray-400 dark:text-gray-500">Shtrix: {item.product.barcode}</div>
-                          )}
-                        </td>
-                        <td className={`px-3 py-4 text-center ${visuals.quantityClass} text-base`}>
-                          {visuals.icon}
-                          {visuals.text}
-                        </td>
-                        <td className="px-5 py-4 whitespace-nowrap">{item.operation_type_display}</td>
-                        <td className="px-5 py-4 whitespace-nowrap">{item.kassa?.name || "-"}</td>
-                        <td className="px-5 py-4 whitespace-nowrap">{item.user?.username || "-"}</td>
-                        <td className="px-5 py-4 text-gray-700 dark:text-gray-300 min-w-[200px] break-words">
-                          {item.comment || "-"}
-                        </td>
-                        <td className="px-5 py-4 text-right whitespace-nowrap">{formatDate(item.timestamp)}</td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan="8" className="px-5 py-16 text-center text-gray-500 dark:text-gray-400 text-lg">
-                      {searchTerm ? "Qidiruv natijasi bo'sh." : "Harakatlar tarixi mavjud emas."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {historyData && (items.length > 0 || historyData.previous || historyData.next) && (
-          <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <span className="text-sm text-gray-700 dark:text-gray-400 mb-2 sm:mb-0">
-              Jami: {historyData.count} ta yozuv. Sahifa: {historyData.results.length > 0 ? (parseInt(new URL(currentPageUrl.includes('?') ? currentPageUrl : `${currentPageUrl}?page=1`).searchParams.get('page') || '1')) : '-'} / {historyData.count > 0 ? Math.ceil(historyData.count / (historyData.results.length || 10)) : '-'}
-            </span>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => handlePageChange(historyData.previous)}
-                disabled={!historyData.previous || isLoading}
-                className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" /> Oldingisi
-              </button>
-              <button
-                onClick={() => handlePageChange(historyData.next)}
-                disabled={!historyData.next || isLoading}
-                className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-              >
-                Keyingisi <ChevronRight className="h-4 w-4 ml-1" />
-              </button>
+    <TooltipProvider delayDuration={100}>
+      <div className="p-4 md:p-6 lg:p-8 bg-muted/20 dark:bg-background min-h-screen">
+        <Card className="shadow-xl border-border">
+          <CardHeader className="border-b border-border">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+              <CardTitle className="text-2xl font-semibold tracking-tight">
+                Hisobotlar
+              </CardTitle>
+              <div className="relative w-full sm:w-auto sm:max-w-sm">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Mahsulot, izoh, foydalanuvchi..."
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  className="pl-10 text-sm h-9"
+                />
+              </div>
             </div>
-          </div>
-        )}
+            {/* Keyingi yuklashda xatolik bo'lsa (ma'lumotlar allaqachon bor) */}
+            {error && historyData && (
+              <div className="mt-4 p-3 bg-destructive/10 text-destructive text-sm rounded-md flex justify-between items-center">
+                <span>Xatolik: {error}</span>
+                 <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setError(null); fetchInventoryHistory(currentPage, searchTerm);}}>
+                    Qayta urinish
+                 </Button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="p-0 relative"> {/* Yuklagich uchun relative */}
+            {/* Keyingi sahifalarni yuklash uchun indikator */}
+            {isLoading && historyData && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/60 dark:bg-background/80 z-20 rounded-b-lg">
+                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <Table className="text-sm">
+                <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
+                  <TableRow>
+                    <TableHead className="w-[60px] px-3 sm:px-4 py-3">№</TableHead>
+                    <TableHead className="min-w-[220px] px-3 sm:px-4">Mahsulot</TableHead>
+                    <TableHead className="w-[120px] text-center px-3 sm:px-4">Miqdor</TableHead>
+                    <TableHead className="min-w-[160px] px-3 sm:px-4">Operatsiya</TableHead>
+                    <TableHead className="min-w-[130px] px-3 sm:px-4">Kassa</TableHead>
+                    <TableHead className="min-w-[130px] px-3 sm:px-4">Foydalanuvchi</TableHead>
+                    <TableHead className="min-w-[250px] px-3 sm:px-4">Izoh</TableHead>
+                    <TableHead className="w-[170px] text-right px-3 sm:px-4">Sana</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.length > 0 ? (
+                    items.map((item, index) => {
+                      const visuals = getOperationVisuals(item.quantity);
+                      return (
+                        <TableRow key={item.id} className={visuals.rowClass}>
+                          <TableCell className="px-3 sm:px-4 py-3 text-muted-foreground">
+                            {startingItemNumber + index}
+                          </TableCell>
+                          <TableCell className="px-3 sm:px-4 py-3 font-medium">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="font-semibold truncate max-w-[200px] sm:max-w-xs" title={item.product?.name}>
+                                  {item.product?.name || "Noma'lum mahsulot"}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{item.product?.name || "Noma'lum mahsulot"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            {item.product?.category_name && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                {item.product.category_name}
+                              </div>
+                            )}
+                            {item.product?.barcode && (
+                              <div className="text-xs text-muted-foreground/80 mt-0.5">
+                                Shtrix: {item.product.barcode}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className={`px-3 sm:px-4 py-3 text-center ${visuals.quantityClass} text-base`}>
+                            {visuals.icon}
+                            {visuals.text}
+                          </TableCell>
+                          <TableCell className="px-3 sm:px-4 py-3">{item.operation_type_display}</TableCell>
+                          <TableCell className="px-3 sm:px-4 py-3">{item.kassa?.name || "-"}</TableCell>
+                          <TableCell className="px-3 sm:px-4 py-3">{item.user?.username || "-"}</TableCell>
+                          <TableCell className="px-3 sm:px-4 py-3 text-foreground/90 max-w-[250px] break-words leading-relaxed">
+                            {item.comment || "-"}
+                          </TableCell>
+                          <TableCell className="px-3 sm:px-4 py-3 text-right">{formatDate(item.timestamp)}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="h-48 text-center"> {/* Balandlik oshirildi */}
+                        <div className="flex flex-col items-center justify-center text-muted-foreground">
+                            <Inbox className="h-16 w-16 mb-3" /> {/* Ikonka kattalashtirildi */}
+                            <p className="text-base font-medium">
+                                {searchTerm ? "Qidiruv bo'yicha yozuvlar topilmadi." : "Hozircha harakatlar tarixi mavjud emas."}
+                            </p>
+                            {searchTerm && (
+                                <Button variant="link" size="sm" onClick={() => { setSearchTerm(""); setCurrentPage(1); }} className="mt-2 text-sm">
+                                    Qidiruvni tozalash
+                                </Button>
+                            )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+           {/* Paginatsiya */}
+           {pageInfo.totalItems > itemsPerPage && (
+                <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-t border-border text-sm">
+                    <span className="text-muted-foreground mb-2 sm:mb-0">
+                        Jami: {pageInfo.totalItems} ta yozuv. Sahifa: {pageInfo.current} / {pageInfo.total}
+                    </span>
+                    <div className="flex items-center space-x-2">
+                        <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange("prev")}
+                        disabled={!historyData?.previous || isLoading}
+                        className="h-8 px-3"
+                        >
+                        <ChevronLeft className="h-4 w-4 mr-1.5" /> Oldingisi
+                        </Button>
+                        <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange("next")}
+                        disabled={!historyData?.next || isLoading}
+                        className="h-8 px-3"
+                        >
+                        Keyingisi <ChevronRight className="h-4 w-4 ml-1.5" />
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </Card>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
