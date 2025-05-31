@@ -436,38 +436,6 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-
-        <div className="bg-card p-4 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-3 text-foreground">
-            Kam qolgan mahsulotlar
-          </h3>
-          {isLoading && !dashboardData && (
-            <div className="flex flex-col items-center justify-center h-full min-h-[100px] py-4">
-              <Loader2 className="h-6 w-6 animate-spin text-primary mb-2" />
-              <p className="text-muted-foreground text-sm">Yuklanmoqda...</p>
-            </div>
-          )}
-          {!isLoading && error && !dashboardData && (
-            <div className="flex items-center justify-center h-full min-h-[100px] py-4">
-              <p className="text-destructive text-sm text-center">
-                Mahsulot qoldiqlari haqida ma'lumot yuklanmadi.
-              </p>
-            </div>
-          )}
-          {!isLoading && dashboardData && (
-            <LowStockProducts products={lowStockItems} />
-          )}
-          {!isLoading &&
-            dashboardData &&
-            lowStockItems.length === 0 &&
-            !error && (
-              <div className="flex items-center justify-center h-full min-h-[100px] py-4">
-                <p className="text-muted-foreground text-sm">
-                  Kam qolgan mahsulotlar mavjud emas.
-                </p>
-              </div>
-            )}
-        </div>
       </div>
 
       {isSalesDetailModalOpen && (

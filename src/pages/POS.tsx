@@ -15,8 +15,8 @@ import {
   UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button"; // Shadcn komponentlari joylashuviga qarab
-import { Input } from "@/components/ui/input";   // Shadcn komponentlari joylashuviga qarab
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -24,10 +24,10 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
-} from "@/components/ui/dialog"; // Shadcn komponentlari joylashuviga qarab
+} from "@/components/ui/dialog";
 
 // --- BU YERGA AKTUAL KURSNI KIRITING YOKI DINAMIK OLING ---
-const UZS_USD_RATE = 12650;
+const UZS_USD_RATE = 12650; // DIQQAT: Bu qiymatni dinamik olish tavsiya etiladi!
 
 // --- Util funksiyalar ---
 const formatPriceUZS = (value?: string | number | null): string => {
@@ -49,7 +49,13 @@ const formatPriceUSD = (value?: string | number | null): string => {
   );
 };
 
-// --- Interfeyslar (ProductFromApi ProductCard da ishlatiladi) ---
+const validatePhoneNumber = (phone: string): boolean => {
+  const phoneRegex = /^\+998\d{9}$/; // Format: +998XXXXXXXXX
+  return phoneRegex.test(phone);
+};
+
+
+// --- Interfeyslar ---
 interface ProductFromApi {
   id: number;
   name: string;
@@ -57,11 +63,40 @@ interface ProductFromApi {
   price_usd?: string | null;
   quantity_in_stock: number;
   barcode?: string | null;
-  type?: "phone" | "accessory";
+  type: "phone" | "accessory"; // Bu endi fetchProducts da aniqlanadi va majburiy
   category_name?: string;
 }
 
-// getDisplayPriceElements ProductCard da ishlatiladi, shuning uchun uni ham oldinroq joylashtiramiz
+interface SalePayloadItem {
+  product_id: number;
+  quantity: number;
+  price: string;
+}
+
+interface NewCustomerDataForSale {
+    full_name: string;
+    phone_number: string;
+    address?: string;
+}
+
+interface SalePayload {
+  items: SalePayloadItem[];
+  payment_type: "Naqd";
+  kassa_id: number;
+  customer_id?: number | null;
+  new_customer?: NewCustomerDataForSale | null;
+  currency: "UZS" | "USD";
+}
+
+interface PaginatedProductResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: any[]; // API dan keladigan Product tipini aniqroq yozish kerak bo'ladi
+}
+
+
+// --- getDisplayPriceElements ---
 const getDisplayPriceElements = (product: ProductFromApi): JSX.Element => {
   const uzsPriceString = product.price_uzs && parseFloat(product.price_uzs) > 0 ? formatPriceUZS(product.price_uzs) : "";
   const usdPriceString = product.price_usd && parseFloat(product.price_usd) > 0 ? formatPriceUSD(product.price_usd) : "";
@@ -83,9 +118,8 @@ const getDisplayPriceElements = (product: ProductFromApi): JSX.Element => {
 
 
 // --- ProductCard Komponenti ---
-// BU YERGA ProductCard komponentini joylashtiramiz
 const ProductCard = ({ product, disabled, onCardClick }: {
-  product: ProductFromApi; // ProductFromApi interfeysi yuqorida aniqlangan
+  product: ProductFromApi;
   disabled: boolean;
   onCardClick: (product: ProductFromApi) => void;
 }) => {
@@ -105,7 +139,7 @@ const ProductCard = ({ product, disabled, onCardClick }: {
           {product.quantity_in_stock > 0 ? `${product.quantity_in_stock} dona mavjud` : "Tugagan"}
         </p>
         <div className="mt-auto mb-1">
-            {getDisplayPriceElements(product)} {/* getDisplayPriceElements yuqorida aniqlangan */}
+            {getDisplayPriceElements(product)}
         </div>
       </div>
       <div className="mt-1 text-center text-xs text-gray-400 pt-2 border-t border-gray-200/80">
@@ -114,53 +148,20 @@ const ProductCard = ({ product, disabled, onCardClick }: {
     </div>
   );
 };
-// --- ProductCard Komponenti TUGADI ---
 
 
-const validatePhoneNumber = (phone: string): boolean => {
-  const phoneRegex = /^\+998\d{9}$/;
-  return phoneRegex.test(phone);
-};
-
-interface SalePayloadItem {
-  product_id: number;
-  quantity: number;
-  price: string;
-}
-
-interface NewCustomerDataForSale {
-    full_name: string;
-    phone_number: string;
-    address?: string;
-    // email?: string;
-}
-
-interface SalePayload {
-  items: SalePayloadItem[];
-  payment_type: "Naqd";
-  kassa_id: number;
-  customer_id?: number | null;
-  new_customer?: NewCustomerDataForSale | null;
-  currency: "UZS" | "USD";
-}
-
-interface PaginatedProductResponse {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: ProductFromApi[]; // Bu ProductFromApi yuqorida ProductCard uchun aniqlangan
-}
-
+// --- API URL manzillari ---
 const API_BASE_URL = "https://smartphone777.pythonanywhere.com/api";
 const API_POS_PRODUCTS_URL = (kassaId: number, searchTerm?: string, pageUrl?: string) => {
   if (pageUrl) return pageUrl;
   let url = `${API_BASE_URL}/pos/products/?kassa_id=${kassaId}`;
-  if (searchTerm) {
-    url += `&search=${encodeURIComponent(searchTerm)}`;
+  if (searchTerm && searchTerm.trim() !== "") {
+    url += `&search=${encodeURIComponent(searchTerm.trim())}`;
   }
   return url;
 };
 const API_CREATE_SALE_URL = `${API_BASE_URL}/sales/`;
+
 
 // --- PosPage Komponenti ---
 export default function PosPage() {
@@ -185,7 +186,6 @@ export default function PosPage() {
   const [customerFullName, setCustomerFullName] = useState<string>("");
   const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
   const [customerAddress, setCustomerAddress] = useState<string>("");
-  // const [customerEmail, setCustomerEmail] = useState<string>("");
 
   const currentKassaId = useMemo(() => currentStore?.id || 1, [currentStore]);
 
@@ -194,74 +194,155 @@ export default function PosPage() {
     setError(null);
     try {
       const token = localStorage.getItem("accessToken");
-      if (!token) { setError("Iltimos, tizimga kiring."); if (isLoadMore) setIsLoadingMore(false); else setIsLoading(false); return; }
+      if (!token) {
+        setError("Avtorizatsiya qilinmagan. Iltimos, tizimga kiring.");
+        if (isLoadMore) setIsLoadingMore(false); else setIsLoading(false);
+        return;
+      }
       const targetUrl = url || API_POS_PRODUCTS_URL(kassaId, search);
-      const response = await axios.get<PaginatedProductResponse | ProductFromApi[]>(targetUrl, { headers: { Authorization: `Bearer ${token}` }, timeout: 20000 });
-      let fetchedProductsData: ProductFromApi[];
-      let nextPage: string | null = null;
-      if ('results' in response.data && Array.isArray(response.data.results)) {
-        fetchedProductsData = response.data.results;
-        nextPage = response.data.next;
-      } else if (Array.isArray(response.data)) {
-        fetchedProductsData = response.data;
-      } else { fetchedProductsData = []; }
-      const productsWithNormalizedData = fetchedProductsData.map((p) => ({ ...p, price_uzs: p.price_uzs?.toString() || null, price_usd: p.price_usd?.toString() || null, type: p.type || (p.name.toLowerCase().includes("iphone") || p.name.toLowerCase().includes("phone") || p.category_name?.toLowerCase().includes("phone") ? "phone" : "accessory"), barcode: p.barcode?.trim() || null, }));
-      if (isLoadMore) setProducts((prev) => [...prev, ...productsWithNormalizedData]); else setProducts(productsWithNormalizedData);
+      const response = await axios.get<PaginatedProductResponse>(targetUrl, { headers: { Authorization: `Bearer ${token}` }, timeout: 20000 });
+
+      let fetchedProductsData: any[] = response.data.results || []; // API dan keladigan asl Product tipi
+      let nextPage: string | null = response.data.next;
+      
+      const productsWithNormalizedData: ProductFromApi[] = fetchedProductsData.map((p: any) => {
+        const pNameLower = p.name?.toLowerCase() || "";
+        const pCategoryNameLower = p.category_name?.toLowerCase() || "";
+        // Mahsulot turini aniqlash (Telefon yoki Aksessuar)
+        const isPhone = pCategoryNameLower.includes("telefon") || 
+                        pCategoryNameLower.includes("phone") ||
+                        pCategoryNameLower.includes("смартфон") || // Rus tilida ham tekshirish
+                        pNameLower.includes("phone") || 
+                        pNameLower.includes("iphone") ||
+                        pNameLower.includes("samsung") || // Mashhur brendlar
+                        pNameLower.includes("redmi") ||
+                        pNameLower.includes("xiaomi") ||
+                        pNameLower.includes("galaxy") ||
+                        pNameLower.match(/\b(a|s|m|f|z)\d{1,2}\b/i); // Samsung modellariga o'xshash
+
+        return {
+          id: p.id,
+          name: p.name,
+          price_uzs: p.price_uzs?.toString() || null,
+          price_usd: p.price_usd?.toString() || null,
+          quantity_in_stock: p.quantity_in_stock,
+          barcode: p.barcode?.trim() || null,
+          category_name: p.category_name,
+          type: isPhone ? "phone" : "accessory",
+        };
+      });
+
+      if (isLoadMore) {
+        setProducts((prev) => [...prev, ...productsWithNormalizedData]);
+      } else {
+        setProducts(productsWithNormalizedData);
+      }
       setNextPageUrl(nextPage);
+
     } catch (err: any) {
-      console.error("POS API xatosi:", err);
-      if (err.response?.status === 401) setError("Sessiya tugadi. Iltimos, tizimga qayta kiring."); else if (err.code === "ECONNABORTED") setError("So‘rov muddati tugadi. Internetni tekshiring."); else setError("Mahsulotlarni olishda xato: " + (err.response?.data?.detail || err.message || "Noma'lum xato"));
+      console.error("POS API xatosi (fetchProducts):", err);
+      if (err.response?.status === 401) {
+        setError("Sessiya muddati tugagan. Iltimos, tizimga qayta kiring.");
+      } else if (err.code === "ECONNABORTED") {
+        setError("Serverga ulanishda vaqt tugadi. Internet aloqasini tekshiring yoki keyinroq urinib ko'ring.");
+      } else {
+        setError("Mahsulotlarni yuklashda xato yuz berdi: " + (err.response?.data?.detail || err.message || "Noma'lum server xatosi"));
+      }
       if (!isLoadMore) setProducts([]);
-    } finally { if (isLoadMore) setIsLoadingMore(false); else setIsLoading(false); }
+    } finally {
+      if (isLoadMore) setIsLoadingMore(false); else setIsLoading(false);
+    }
   }, []);
 
-  useEffect(() => { const timerId = setTimeout(() => setDebouncedSearchTerm(searchTerm), 500); return () => clearTimeout(timerId); }, [searchTerm]);
-  useEffect(() => { if (currentKassaId) fetchProducts(currentKassaId, debouncedSearchTerm, false); else { setError("Kassa tanlanmagan. Sozlamalarni tekshiring."); setIsLoading(false); setProducts([]); setNextPageUrl(null); } }, [currentKassaId, debouncedSearchTerm, fetchProducts]);
+  useEffect(() => {
+    const timerId = setTimeout(() => setDebouncedSearchTerm(searchTerm), 500);
+    return () => clearTimeout(timerId);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (currentKassaId) {
+      fetchProducts(currentKassaId, debouncedSearchTerm, false);
+    } else {
+      setError("Kassa tanlanmagan. Sozlamalarni tekshiring yoki administratorga murojaat qiling.");
+      setIsLoading(false);
+      setProducts([]);
+      setNextPageUrl(null);
+    }
+  }, [currentKassaId, debouncedSearchTerm, fetchProducts]);
 
   const openSaleModalWithProduct = (product: ProductFromApi) => {
-    if (product.quantity_in_stock <= 0) { toast.warning(`"${product.name}" mahsuloti tugagan.`); return; }
+    if (product.quantity_in_stock <= 0) {
+      toast.warning(`"${product.name}" mahsuloti omborda tugagan.`);
+      return;
+    }
     const hasUzs = product.price_uzs && parseFloat(product.price_uzs) > 0;
     const hasUsd = product.price_usd && parseFloat(product.price_usd) > 0;
-    if (!hasUzs && !hasUsd) { toast.warning(`"${product.name}" uchun narx belgilanmagan.`); return; }
+    if (!hasUzs && !hasUsd) {
+      toast.warning(`"${product.name}" uchun narx belgilanmagan. Sotish mumkin emas.`);
+      return;
+    }
     setSelectedProductForSale(product);
-    if (hasUzs) { setSaleCurrency('UZS'); setActualSalePrice(product.price_uzs!); }
-    else if (hasUsd) { setSaleCurrency('USD'); setActualSalePrice(product.price_usd!); }
-    // setCustomerFullName(""); setCustomerPhoneNumber(""); setCustomerAddress(""); setCustomerEmail("");
+    if (hasUzs) {
+      setSaleCurrency('UZS');
+      setActualSalePrice(product.price_uzs!);
+    } else if (hasUsd) {
+      setSaleCurrency('USD');
+      setActualSalePrice(product.price_usd!);
+    }
+    setCustomerFullName("");
+    setCustomerPhoneNumber("");
+    setCustomerAddress("");
     setIsSaleModalOpen(true);
   };
 
   const handleBarcodeScanAndOpenModal = (scannedBarcode: string) => {
     if (!scannedBarcode.trim()) return;
     const code = scannedBarcode.trim().toUpperCase();
-    const found = products.find((p) => p.barcode?.trim().toUpperCase() === code);
-    if (found) { openSaleModalWithProduct(found); setBarcodeTerm(""); }
-    else { toast.error(`"${code}" shtrix kodli mahsulot topilmadi.`); barcodeInputRef.current?.select(); }
+    const foundProduct = products.find((p) => p.barcode?.trim().toUpperCase() === code);
+    if (foundProduct) {
+      openSaleModalWithProduct(foundProduct);
+      setBarcodeTerm(""); 
+    } else {
+      toast.error(`"${code}" shtrix kodli mahsulot joriy kassada topilmadi.`);
+      barcodeInputRef.current?.select();
+    }
   };
 
   const handleSubmitDirectSale = async () => {
     if (!selectedProductForSale || !currentKassaId) {
-      toast.error("Mahsulot yoki kassa tanlanmagan!");
+      toast.error("Sotuv uchun mahsulot yoki kassa tanlanmagan!");
       return;
     }
 
     const salePriceNum = parseFloat(actualSalePrice);
     if (isNaN(salePriceNum) || salePriceNum <= 0) {
-        toast.error(`Sotish narxi (${saleCurrency}) noto'g'ri kiritilgan yoki 0.`);
+        toast.error(`Sotish narxi (${saleCurrency}) noto'g'ri kiritilgan yoki 0 dan kichik/teng.`);
         return;
     }
 
-    if (!customerFullName.trim()) { toast.error("Mijozning ism-familiyasi kiritilishi shart."); return; }
-    if (!customerPhoneNumber.trim()) { toast.error("Mijozning telefon raqami kiritilishi shart."); return; }
-    if (!validatePhoneNumber(customerPhoneNumber.trim())) { toast.error("Telefon raqami noto'g'ri formatda. Masalan: +998901234567"); return; }
-    
-    setIsSubmittingDirectSale(true);
+    let newCustomerPayloadForSale: NewCustomerDataForSale | null = null;
 
-    const newCustomerPayloadForSale: NewCustomerDataForSale = {
-        full_name: customerFullName.trim(),
-        phone_number: customerPhoneNumber.trim(),
-    };
-    if (customerAddress.trim()) newCustomerPayloadForSale.address = customerAddress.trim();
-    // if (customerEmail.trim()) newCustomerPayloadForSale.email = customerEmail.trim();
+    if (selectedProductForSale.type === 'phone') { // Faqat telefon uchun mijoz ma'lumotlari
+      if (!customerFullName.trim()) {
+          toast.error("Mijozning ism-familiyasi kiritilishi shart (telefon sotuvi uchun).");
+          return;
+      }
+      if (!customerPhoneNumber.trim()) {
+          toast.error("Mijozning telefon raqami kiritilishi shart (telefon sotuvi uchun).");
+          return;
+      }
+      if (!validatePhoneNumber(customerPhoneNumber.trim())) {
+          toast.error("Telefon raqami noto'g'ri formatda kiritilgan. Masalan: +998901234567");
+          return;
+      }
+      newCustomerPayloadForSale = {
+          full_name: customerFullName.trim(),
+          phone_number: customerPhoneNumber.trim(),
+      };
+      if (customerAddress.trim()) newCustomerPayloadForSale.address = customerAddress.trim();
+    }
+
+    setIsSubmittingDirectSale(true);
 
     const salePayload: SalePayload = {
       items: [{
@@ -272,7 +353,7 @@ export default function PosPage() {
       payment_type: "Naqd",
       kassa_id: currentKassaId,
       customer_id: null, 
-      new_customer: newCustomerPayloadForSale, 
+      new_customer: newCustomerPayloadForSale,
       currency: saleCurrency,
     };
 
@@ -280,30 +361,36 @@ export default function PosPage() {
       const token = localStorage.getItem("accessToken");
       await axios.post(API_CREATE_SALE_URL, salePayload, { headers: { Authorization: `Bearer ${token}` } });
 
-      let saleMessage = `"${selectedProductForSale.name}" ${salePriceNum.toLocaleString()} ${saleCurrency} ga sotildi!`;
+      let saleMessage = `"${selectedProductForSale.name}" mahsuloti ${salePriceNum.toLocaleString()} ${saleCurrency} ga muvaffaqiyatli sotildi!`;
       if (saleCurrency === 'USD' && UZS_USD_RATE > 0) {
         const uzsEquivalent = salePriceNum * UZS_USD_RATE;
         saleMessage += ` (Taxminan ${formatPriceUZS(uzsEquivalent).replace(" so'm", "")} UZS)`;
       }
       toast.success(saleMessage);
       setIsSaleModalOpen(false);
-      fetchProducts(currentKassaId, debouncedSearchTerm, false); 
+      fetchProducts(currentKassaId, debouncedSearchTerm, false);
       setSelectedProductForSale(null);
     } catch (err: any) {
-        console.error("Sotuvda xato:", err);
-        let errorMessage = "Sotuvni amalga oshirishda xatolik: ";
+        console.error("Sotuvni amalga oshirishda xato:", err);
+        let errorMessage = "Sotuvni amalga oshirishda xatolik yuz berdi: ";
         if (err.response?.data) {
             const errors = err.response.data;
-            if (typeof errors === "string") { errorMessage += errors;
+            if (typeof errors === "string") {
+                errorMessage += errors;
             } else if (typeof errors === "object") {
                 if (errors.customer_id && Array.isArray(errors.customer_id)) { errorMessage += `Mijoz ID: ${errors.customer_id.join(', ')}. `; }
                 if (errors.new_customer) {
-                    if (Array.isArray(errors.new_customer)) { errorMessage += `Yangi mijoz: ${errors.new_customer.join(', ')}. `;
+                    if (Array.isArray(errors.new_customer)) {
+                        errorMessage += `Yangi mijoz: ${errors.new_customer.join(', ')}. `;
                     } else if (typeof errors.new_customer === 'object') {
                         let ncErrorString = "Yangi mijoz ma'lumotlarida xatolik: ";
-                        Object.entries(errors.new_customer).forEach(([key, value]) => { ncErrorString += `${key}: ${Array.isArray(value) ? value.join(', ') : value}. `; });
+                        Object.entries(errors.new_customer).forEach(([key, value]) => {
+                            ncErrorString += `${key}: ${Array.isArray(value) ? value.join(', ') : value}. `;
+                        });
                         errorMessage += ncErrorString;
-                    } else { errorMessage += `Yangi mijoz: ${errors.new_customer.toString()}. `; }
+                    } else {
+                        errorMessage += `Yangi mijoz: ${errors.new_customer.toString()}. `;
+                    }
                 }
                 Object.keys(errors).filter(key => key !== 'customer_id' && key !== 'new_customer').forEach((key) => {
                         const errorValue = errors[key];
@@ -313,15 +400,22 @@ export default function PosPage() {
                         else fieldError = errorValue.toString();
                         errorMessage += `${key}: ${fieldError}. `;
                     });
-            } else { errorMessage += "Noma'lum server xatosi tuzilmasi."; }
-        } else { errorMessage += err.message || "Server bilan aloqa yo'q."; }
+            } else {
+                errorMessage += "Noma'lum server xatosi tuzilmasi.";
+            }
+        } else {
+            errorMessage += err.message || "Server bilan aloqa yo'q yoki noma'lum xatolik.";
+        }
         toast.error(errorMessage, { duration: 10000 });
     }
-    finally { setIsSubmittingDirectSale(false); }
+    finally {
+      setIsSubmittingDirectSale(false);
+    }
   };
 
   const hasUzsPriceForSelected = selectedProductForSale?.price_uzs && parseFloat(selectedProductForSale.price_uzs) > 0;
   const hasUsdPriceForSelected = selectedProductForSale?.price_usd && parseFloat(selectedProductForSale.price_usd) > 0;
+  const isCustomerInfoRequired = selectedProductForSale?.type === 'phone';
 
   return (
     <div className="p-4 md:p-6 space-y-6 h-full flex flex-col bg-gray-100">
@@ -338,7 +432,7 @@ export default function PosPage() {
               ref={barcodeInputRef}
               type="text"
               placeholder="Shtrix kodni skanerlang yoki kiriting"
-              className="pl-10 pr-3 py-2.5 w-full text-sm border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+              className="pl-10 pr-3 py-2.5 w-full text-sm border-gray-300 rounded-md focus:ring-primary focus:border-primary h-11"
               value={barcodeTerm}
               onChange={(e) => setBarcodeTerm(e.target.value)}
               onKeyPress={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBarcodeScanAndOpenModal(barcodeTerm); } }}
@@ -350,7 +444,7 @@ export default function PosPage() {
             <Input
               type="text"
               placeholder="Mahsulot nomi bo'yicha qidirish..."
-              className="pl-10 pr-3 py-2.5 w-full text-sm border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+              className="pl-10 pr-3 py-2.5 w-full text-sm border-gray-300 rounded-md focus:ring-primary focus:border-primary h-11"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -363,19 +457,23 @@ export default function PosPage() {
             </div>
         ) : error ? (
             <div className="flex-grow flex flex-col items-center justify-center text-center p-4 border-2 border-dashed border-red-300 bg-red-50 rounded-md">
-                <p className="text-red-600 font-medium">Xatolik!</p>
-                <p className="text-xs text-red-500 mt-1">{error}</p>
+                <p className="text-red-600 font-medium">Xatolik Yuz Berdi!</p>
+                <p className="text-sm text-red-500 mt-1 whitespace-pre-line">{error}</p>
                 <Button onClick={() => {fetchProducts(currentKassaId, debouncedSearchTerm, false);}} variant="destructive" size="sm" className="mt-3">
-                    Qayta urinish
+                    Qayta Yuklash
                 </Button>
             </div>
         ) : products.length > 0 ? (
             <>
                 <div className="flex-grow overflow-y-auto pr-2 pb-4 custom-scrollbar min-h-0">
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5">
-                        {/* BU YERDA ProductCard ishlatiladi */}
                         {products.map((product) => (
-                            <ProductCard key={product.id} product={product} disabled={product.quantity_in_stock <= 0} onCardClick={openSaleModalWithProduct} />
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              disabled={product.quantity_in_stock <= 0}
+                              onCardClick={openSaleModalWithProduct}
+                            />
                         ))}
                     </div>
                 </div>
@@ -383,16 +481,16 @@ export default function PosPage() {
                     <div className="flex justify-center pt-2 pb-4 flex-shrink-0">
                         <Button onClick={() => fetchProducts(currentKassaId, debouncedSearchTerm, true, nextPageUrl)} disabled={isLoadingMore} variant="outline">
                             {isLoadingMore ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ChevronDown className="mr-2 h-4 w-4" />}
-                            Ko'proq yuklash
+                            Ko'proq mahsulot yuklash
                         </Button>
                     </div>
                 )}
             </>
-        ) : ( 
+        ) : (
             <div className="text-center text-gray-500 p-8 border-dashed border-2 border-gray-300 rounded-md flex-grow flex flex-col items-center justify-center">
                 <Search className="h-12 w-12 mb-3 text-gray-400" />
-                <p>Mahsulotlar topilmadi</p>
-                {debouncedSearchTerm && <p className="text-sm mt-1">"{debouncedSearchTerm}" uchun natija yo'q.</p>}
+                <p>Hozircha mahsulotlar yo'q</p>
+                {debouncedSearchTerm && <p className="text-sm mt-1">"{debouncedSearchTerm}" qidiruvi bo'yicha natija topilmadi.</p>}
             </div>
         )}
       </div>
@@ -401,46 +499,45 @@ export default function PosPage() {
         <Dialog open={isSaleModalOpen} onOpenChange={(isOpen) => { setIsSaleModalOpen(isOpen); if (!isOpen) setSelectedProductForSale(null); }} >
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-                <DialogTitle>Sotuv: {selectedProductForSale.name || "Nomsiz"}</DialogTitle>
+                <DialogTitle>Sotuv: {selectedProductForSale.name || "Nomsiz mahsulot"}</DialogTitle>
                 <DialogDescription>
-                    Mahsulot sotuvi uchun mijoz ma'lumotlarini kiriting.
-                    <span className="text-destructive"> *</span> bilan belgilangan maydonlar majburiy.
+                    Mahsulot sotuvi uchun {isCustomerInfoRequired ? "mijoz ma'lumotlarini va " : ""}sotuv narxini kiriting.
+                    {isCustomerInfoRequired && <><span className="text-destructive"> *</span> bilan belgilangan maydonlar majburiy.</>}
                 </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-3 custom-scrollbar">
-              <div className="text-sm space-y-1">
-                <p><strong>Asl narxi:</strong> <span className="flex flex-col">{getDisplayPriceElements(selectedProductForSale)}</span></p>
-                <p><strong>Omborda:</strong> {selectedProductForSale.quantity_in_stock} dona</p>
+              <div className="text-sm space-y-1 bg-gray-50 p-3 rounded-md border">
+                <p><strong>Asl narxi:</strong></p>
+                <div className="pl-2">{getDisplayPriceElements(selectedProductForSale)}</div>
+                <p><strong>Omborda mavjud:</strong> {selectedProductForSale.quantity_in_stock} dona</p>
               </div>
 
-              <div className="space-y-3 border-t pt-4 mt-3">
-                <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <UserPlus className="mr-2 h-4 w-4 text-gray-500"/>
-                    Mijoz Ma'lumotlari (Majburiy)
-                </h3>
-                <div>
-                    <label htmlFor="modalCustomerFullName" className="block text-xs font-medium text-gray-700 mb-0.5">
-                        Mijoz ism-familiyasi <span className="text-destructive">*</span>
-                    </label>
-                    <Input id="modalCustomerFullName" type="text" value={customerFullName} onChange={(e) => setCustomerFullName(e.target.value)} placeholder="Ism Familiya" />
+              {isCustomerInfoRequired && ( // Faqat telefon uchun mijoz ma'lumotlari ko'rsatiladi
+                <div className="space-y-3 border-t pt-4 mt-3">
+                  <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <UserPlus className="mr-2 h-4 w-4 text-gray-500"/>
+                      Mijoz Ma'lumotlari (Telefon sotuvi uchun)
+                  </h3>
+                  <div>
+                      <label htmlFor="modalCustomerFullName" className="block text-xs font-medium text-gray-700 mb-0.5">
+                          Mijoz ism-familiyasi <span className="text-destructive">*</span>
+                      </label>
+                      <Input id="modalCustomerFullName" type="text" value={customerFullName} onChange={(e) => setCustomerFullName(e.target.value)} placeholder="Masalan: Alisher Valiev" />
+                  </div>
+                  <div>
+                      <label htmlFor="modalCustomerPhoneNumber" className="block text-xs font-medium text-gray-700 mb-0.5">
+                          Telefon raqami <span className="text-destructive">*</span>
+                      </label>
+                      <Input id="modalCustomerPhoneNumber" type="tel" value={customerPhoneNumber} onChange={(e) => setCustomerPhoneNumber(e.target.value)} placeholder="+998901234567" />
+                  </div>
+                  <div>
+                      <label htmlFor="modalCustomerAddress" className="block text-xs font-medium text-gray-700 mb-0.5">
+                          Manzil (ixtiyoriy)
+                      </label>
+                      <Input id="modalCustomerAddress" type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Masalan: Toshkent sh., Chilanzar tumani" />
+                  </div>
                 </div>
-                <div>
-                    <label htmlFor="modalCustomerPhoneNumber" className="block text-xs font-medium text-gray-700 mb-0.5">
-                        Telefon raqami <span className="text-destructive">*</span>
-                    </label>
-                    <Input id="modalCustomerPhoneNumber" type="text" value={customerPhoneNumber} onChange={(e) => setCustomerPhoneNumber(e.target.value)} placeholder="+998901234567" />
-                </div>
-                <div>
-                    <label htmlFor="modalCustomerAddress" className="block text-xs font-medium text-gray-700 mb-0.5">
-                        Manzil {/* Agar majburiy bo'lsa: <span className="text-destructive">*</span> */}
-                    </label>
-                    <Input id="modalCustomerAddress" type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Toshkent sh., Chilanzar tumani (ixtiyoriy)" />
-                </div>
-                {/* <div>
-                    <label htmlFor="modalCustomerEmail" className="block text-xs font-medium text-gray-700 mb-0.5">Email</label>
-                    <Input id="modalCustomerEmail" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="example@mail.com (ixtiyoriy)" />
-                </div> */}
-              </div>
+              )}
 
               <div className="space-y-3 border-t pt-4 mt-3">
                 <h3 className="text-sm font-medium text-gray-700">To'lov: Naqd</h3>
@@ -452,19 +549,40 @@ export default function PosPage() {
                     </div>
                 )}
                 <div>
-                    <label htmlFor="salePriceNaqd" className="block text-sm font-medium text-gray-700 mb-1">Sotish narxi ({saleCurrency})</label>
-                    <Input id="salePriceNaqd" type="number" value={actualSalePrice} onChange={(e) => setActualSalePrice(e.target.value)} placeholder={`Narxni ${saleCurrency} da kiriting`} min="0"/>
+                    <label htmlFor="salePriceNaqd" className="block text-sm font-medium text-gray-700 mb-1">
+                        Sotish narxi ({saleCurrency}) <span className="text-destructive">*</span>
+                    </label>
+                    <Input id="salePriceNaqd" type="number" value={actualSalePrice} onChange={(e) => setActualSalePrice(e.target.value)} placeholder={`Narxni ${saleCurrency} da kiriting`} min="0.01" step="any"/>
                 </div>
-                { (saleCurrency === 'UZS' && hasUzsPriceForSelected) || (saleCurrency === 'USD' && hasUsdPriceForSelected) ? (
-                  <Button variant="outline" size="sm" onClick={() => { if (saleCurrency === 'UZS' && selectedProductForSale.price_uzs) setActualSalePrice(selectedProductForSale.price_uzs); else if (saleCurrency === 'USD' && selectedProductForSale.price_usd) setActualSalePrice(selectedProductForSale.price_usd); }}>
+                { ((saleCurrency === 'UZS' && hasUzsPriceForSelected) || (saleCurrency === 'USD' && hasUsdPriceForSelected)) && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="p-0 h-auto text-xs"
+                    onClick={() => {
+                      if (saleCurrency === 'UZS' && selectedProductForSale.price_uzs) {
+                        setActualSalePrice(selectedProductForSale.price_uzs);
+                      } else if (saleCurrency === 'USD' && selectedProductForSale.price_usd) {
+                        setActualSalePrice(selectedProductForSale.price_usd);
+                      }
+                    }}>
                     Asl narxni ({saleCurrency}) ishlatish
                   </Button>
-                ) : null }
+                )}
               </div>
             </div>
             <DialogFooter>
-                <Button variant="outline" onClick={() => setIsSaleModalOpen(false)}>Bekor qilish</Button>
-                <Button onClick={handleSubmitDirectSale} disabled={isSubmittingDirectSale || parseFloat(actualSalePrice) <= 0 || isNaN(parseFloat(actualSalePrice))} className="bg-green-500 hover:bg-green-600 text-white">
+                <Button variant="outline" onClick={() => setIsSaleModalOpen(false)} disabled={isSubmittingDirectSale}>Bekor qilish</Button>
+                <Button
+                  onClick={handleSubmitDirectSale}
+                  disabled={
+                    isSubmittingDirectSale ||
+                    parseFloat(actualSalePrice) <= 0 ||
+                    isNaN(parseFloat(actualSalePrice)) ||
+                    (isCustomerInfoRequired && (!customerFullName.trim() || !customerPhoneNumber.trim() || !validatePhoneNumber(customerPhoneNumber.trim())))
+                  }
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
                     {isSubmittingDirectSale && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Sotish
                 </Button>
             </DialogFooter>
