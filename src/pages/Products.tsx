@@ -60,11 +60,11 @@ import JsBarcode from "jsbarcode";
 
 // API URL manzillari
 const API_URL_PRODUCTS_LISTING =
-  "https://smartphone777.pythonanywhere.com/api/products/";
+  "http://nuriddin777.uz/api/products/";
 const API_URL_PRODUCT_OPERATIONS =
-  "https://smartphone777.pythonanywhere.com/api/products/";
+  "http://nuriddin777.uz/api/products/";
 const API_URL_CATEGORIES =
-  "https://smartphone777.pythonanywhere.com/api/categories/";
+  "http://nuriddin777.uz/api/categories/";
 
 interface Product {
   id: number;
@@ -190,9 +190,12 @@ export default function ProductsPage() {
       let options: Intl.NumberFormatOptions = {};
       if (currency === "$") {
         options = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
-        if (numericPrice % 1 === 0) options = { maximumFractionDigits: 0 };
-      } else {
-        options = { maximumFractionDigits: 0 };
+        // Agar AQSh dollaridagi narx butun son bo'lsa (masalan, $123), .00 qismini ko'rsatmaslik uchun
+        if (numericPrice % 1 === 0) {
+          options = { maximumFractionDigits: 0 };
+        }
+      } else { // so'm uchun
+        options = { maximumFractionDigits: 0 }; // So'm uchun har doim butun son
       }
       const formatted = numericPrice.toLocaleString(
         currency === "$" ? "en-US" : "uz-UZ",
@@ -202,6 +205,30 @@ export default function ProductsPage() {
     },
     []
   );
+
+  const formatCombinedPrice = useCallback(
+    (
+      priceUsdStr: string | null | undefined,
+      priceUzsStr: string | null | undefined
+    ): string => {
+      const usdValid = priceUsdStr && !isNaN(parseFloat(priceUsdStr)) && parseFloat(priceUsdStr) >= 0;
+      const uzsValid = priceUzsStr && !isNaN(parseFloat(priceUzsStr)) && parseFloat(priceUzsStr) >= 0;
+
+      const usdFormatted = usdValid ? formatPriceForTable(priceUsdStr, "$") : null;
+      const uzsFormatted = uzsValid ? formatPriceForTable(priceUzsStr, "so'm") : null;
+
+      if (usdFormatted && uzsFormatted) {
+        // Agar ikkala narx ham 0 bo'lsa (yoki undan kichik, lekin bu holat validatsiyada oldini olinishi kerak)
+        // Misol: "$0 / 0 so'm" ko'rinishida.
+        return `${usdFormatted} / ${uzsFormatted}`;
+      }
+      if (usdFormatted) return usdFormatted;
+      if (uzsFormatted) return uzsFormatted;
+      return "-";
+    },
+    [formatPriceForTable]
+  );
+
 
   const determineProductTypeForDisplay = useCallback(
     (product: Product): string => {
@@ -242,7 +269,7 @@ export default function ProductsPage() {
         return;
       }
 
-      const params = { page_size: 10000 }; // Barcha mahsulotlarni olish uchun katta page_size
+      const params = { page_size: 10000 };
 
       type PaginatedProductResponse = {
         count: number;
@@ -255,7 +282,7 @@ export default function ProductsPage() {
         API_URL_PRODUCTS_LISTING,
         {
           headers: { Authorization: `Bearer ${token}` },
-          timeout: 25000, // Vaqtni biroz oshirdik, ko'p ma'lumot uchun
+          timeout: 25000,
           params: params,
         }
       );
@@ -266,7 +293,6 @@ export default function ProductsPage() {
         if (response.data.next && fetchedProducts.length < response.data.count) {
           const warningMessage = `Mahsulotlar API'sidan barcha ma'lumotlar olinmagan bo'lishi mumkin. Paginatsiya mavjud ('next' linki topildi). Administrator bilan bog'laning yoki 'page_size' parametrini tekshiring.`;
           console.warn(warningMessage, response.data.next);
-          // Foydalanuvchiga ham xabar berish
           setError(
             (prevError) => (prevError ? prevError + "\n" : "") + "Diqqat: Barcha mahsulotlar yuklanmagan bo'lishi mumkin."
           );
@@ -293,7 +319,6 @@ export default function ProductsPage() {
           if (err.response.data.detail) {
             errMsg = err.response.data.detail;
           } else if (typeof err.response.data === "object") {
-            // Django REST framework xatoliklarini formatlash
             const errors = Object.entries(err.response.data)
               .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
               .join("; ");
@@ -316,7 +341,7 @@ export default function ProductsPage() {
       const token = localStorage.getItem("accessToken");
       if (!token) return;
 
-      const params = { page_size: 1000 }; // Kategoriyalar uchun
+      const params = { page_size: 1000 };
 
       type PaginatedCategoryResponse = {
         count: number;
@@ -376,7 +401,6 @@ export default function ProductsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast.success(`Kategoriya "${response.data.name}" qo'shildi!`);
-      // Kategoriyalarni qayta fetch qilish o'rniga, yangisini qo'shib, saralaymiz
       setCategories((prev) =>
         [response.data, ...prev].sort((a, b) => a.name.localeCompare(b.name))
       );
@@ -438,7 +462,7 @@ export default function ProductsPage() {
         ?.toLowerCase()
         .includes(lowerCaseSearch);
 
-      if (isPotentialCode && searchTerms.length === 1) return barcodeOrImeiMatch; // Aniq kod qidirilganda
+      if (isPotentialCode && searchTerms.length === 1) return barcodeOrImeiMatch;
       return (
         nameMatch ||
         seriesRegionMatch ||
@@ -451,9 +475,6 @@ export default function ProductsPage() {
   }, [products, search]);
 
   const handleProductAdded = (newlyAddedProduct: Product) => {
-    // Optimistik yangilash yoki to'liq qayta yuklash
-    // Hozirda `AddProductDialog` `onAddProduct` orqali yangi mahsulotni qaytarmayapti,
-    // shuning uchun to'liq qayta yuklash yaxshiroq.
     fetchProducts();
     setIsAddProductDialogOpen(false);
     toast.success(`"${newlyAddedProduct.name}" muvaffaqiyatli qo'shildi!`);
@@ -468,7 +489,6 @@ export default function ProductsPage() {
   const handleDeleteConfirmation = async () => {
     if (!productToDelete) return;
     const originalProducts = [...products];
-    // Optimistik UI: Darhol ro'yxatdan o'chiramiz
     setProducts((prev) => prev.filter((p) => p.id !== productToDelete!.id));
     setIsDeleteDialogOpen(false);
 
@@ -486,7 +506,6 @@ export default function ProductsPage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast.success(`"${productToDelete.name}" muvaffaqiyatli arxivlandi.`);
-      // fetchProducts(); // Yoki faqat lokal state'ni yangilash kifoya, chunki faqat is_active o'zgardi
       setProductToDelete(null);
     } catch (err: any) {
       let errMsg = `"${productToDelete.name}" ni arxivlashda xato: `;
@@ -499,8 +518,8 @@ export default function ProductsPage() {
         errMsg += err.message || "Noma'lum xato.";
       }
       toast.error(errMsg.trim(), { duration: 7000 });
-      setProducts(originalProducts); // Xatolikda orqaga qaytaramiz
-      setProductToDelete(null); // Clear productToDelete even on error to allow re-try
+      setProducts(originalProducts);
+      setProductToDelete(null);
     }
   };
 
@@ -522,7 +541,7 @@ export default function ProductsPage() {
       setEligibleProductsForPrint(itemsToPrint);
       const initialSelections: Record<number, boolean> = {};
       itemsToPrint.forEach((p) => {
-        initialSelections[p.id] = true; // By default, select all eligible
+        initialSelections[p.id] = true;
       });
       setSelectedProductsToPrint(initialSelections);
       setIsPrintModalOpen(true);
@@ -565,7 +584,7 @@ export default function ProductsPage() {
             ? `<div class="label-details">${details
                 .map((d) => `<div class="detail-item">${d}</div>`)
                 .join("")}</div>`
-            : '<div class="label-details-placeholder"></div>'; // Ensure consistent height
+            : '<div class="label-details-placeholder"></div>';
 
         return `<div class="print-label">
                     <div class="label-name">${p.name || ""}</div>
@@ -623,15 +642,13 @@ export default function ProductsPage() {
         setPrintingProductId(null);
         return;
       }
-      // API dan yorliq uchun maxsus ma'lumotlarni olish
       const response = await axios.get<{
         name: string;
-        barcode_image_base64: string; // base64 formatdagi shtrix-kod rasmi
-        battery_health?: string;      // Batareya foizi (agar bo'lsa)
-        series_region?: string;       // Seriya/Region (agar bo'lsa)
-        // Boshqa kerakli maydonlar
+        barcode_image_base64: string;
+        battery_health?: string;
+        series_region?: string;
       }>(
-        `${API_URL_PRODUCT_OPERATIONS}${product.id}/print-label-data/`, // Maxsus endpoint
+        `${API_URL_PRODUCT_OPERATIONS}${product.id}/print-label-data/`,
         {
           headers: { Authorization: `Bearer ${token}` },
           timeout: 10000,
@@ -650,7 +667,6 @@ export default function ProductsPage() {
       if (product.storage_capacity)
         detailsArray.push(`Xotira: ${product.storage_capacity}`);
 
-      // printData dan olingan ma'lumotlarga ustunlik beramiz, yo'q bo'lsa product dan olamiz
       const productType = determineProductTypeForDisplay(product);
       if (productType === "iPhone") {
         if (printData.battery_health || product.battery_health)
@@ -718,7 +734,7 @@ export default function ProductsPage() {
 
   const formatIdentifierForDisplay = (idStr: string | null | undefined) => {
     if (!idStr) return "-";
-    const ids = idStr.split(/[\s,;]+/).filter(Boolean); // Bo'sh elementlarni olib tashlash
+    const ids = idStr.split(/[\s,;]+/).filter(Boolean);
     if (ids.length === 0) return "-";
     if (ids.length === 1) return ids[0];
     return (
@@ -871,19 +887,11 @@ export default function ProductsPage() {
                       <TableCell className="px-2 sm:px-4">
                         {determineProductTypeForDisplay(p)}
                       </TableCell>
-                      <TableCell className="px-2 sm:px-4">
-                        {p.price_uzs && parseFloat(p.price_uzs) > 0
-                          ? formatPriceForTable(p.price_uzs, "so'm")
-                          : p.price_usd && parseFloat(p.price_usd) > 0
-                          ? formatPriceForTable(p.price_usd, "$")
-                          : "-"}
+                      <TableCell className="px-2 sm:px-4 whitespace-nowrap">
+                        {formatCombinedPrice(p.price_usd, p.price_uzs)}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell px-2 sm:px-4">
-                        {p.purchase_price_usd && parseFloat(p.purchase_price_usd) > 0
-                         ? formatPriceForTable(p.purchase_price_usd, "$")
-                         : p.purchase_price_uzs && parseFloat(p.purchase_price_uzs) > 0
-                         ? formatPriceForTable(p.purchase_price_uzs, "so'm")
-                         : "-"}
+                      <TableCell className="hidden md:table-cell px-2 sm:px-4 whitespace-nowrap">
+                         {formatCombinedPrice(p.purchase_price_usd, p.purchase_price_uzs)}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell px-2 sm:px-4">
                         {p.storage_capacity || "-"}
@@ -969,9 +977,8 @@ export default function ProductsPage() {
           <AddProductDialog
             open={isAddProductDialogOpen}
             onOpenChange={setIsAddProductDialogOpen}
-            onAddProduct={handleProductAdded} // handleProductAdded ga yangi mahsulotni qaytarishi kerak
+            onAddProduct={handleProductAdded}
             initialView={addDialogInitialView}
-            // categories={categories} // Agar AddProductDialog'ga kategoriyalar kerak bo'lsa
           />
         )}
         {isEditDialogOpen && selectedProductForEdit && (
@@ -983,7 +990,6 @@ export default function ProductsPage() {
             }}
             product={selectedProductForEdit}
             onProductSuccessfullyEdited={handleProductSuccessfullyEdited}
-            // categories={categories} // Agar EditProductDialog'ga kategoriyalar kerak bo'lsa
           />
         )}
 

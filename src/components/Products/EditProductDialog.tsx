@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import axios from "axios";
 import { Loader2 } from "lucide-react";
 
-const API_URL_PRODUCTS = "https://smartphone777.pythonanywhere.com/api/products/";
+const API_URL_PRODUCTS = "http://nuriddin777.uz/api/products/";
 
 
 interface EditFormData {

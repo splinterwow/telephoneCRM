@@ -115,13 +115,13 @@ interface AddProductDialogProps {
 }
 
 const API_URL_CATEGORIES =
-  "https://smartphone777.pythonanywhere.com/api/categories/";
+  "http://nuriddin777.uz/api/categories/";
 const API_URL_PRODUCTS =
-  "https://smartphone777.pythonanywhere.com/api/products/";
+  "http://nuriddin777.uz/api/products/";
 const API_URL_GENERATE_BARCODE =
-  "https://smartphone777.pythonanywhere.com/api/products/generate-barcode/";
+  "http://nuriddin777.uz/api/products/generate-barcode/";
 const API_URL_KASSA =
-  "https://smartphone777.pythonanywhere.com/api/kassa/";
+  "http://nuriddin777.uz/api/kassa/";
 
 export function AddProductDialog({
   open,
@@ -1157,3 +1157,4 @@ export function AddProductDialog({
     </Dialog>
   );
 }
+

@@ -40,7 +40,7 @@ export default function Login() {
 
     try {
       const response = await axios.post(
-        "https://smartphone777.pythonanywhere.com/api/auth/login/",
+        "http://nuriddin777.uz/api/auth/login/",
         {
           username,
           password,

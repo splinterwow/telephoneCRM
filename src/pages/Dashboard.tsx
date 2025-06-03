@@ -2,41 +2,43 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { StatsCard } from "@/components/Dashboard/StatsCard"; // Taxminiy joylashuv
 import { SalesChart } from "@/components/Dashboard/SalesChart"; // Taxminiy joylashuv
-import { LowStockProducts } from "@/components/Dashboard/LowStockProducts"; // Taxminiy joylashuv
+// LowStockProducts import qilingan, lekin ishlatilmagan. Agar kerak bo'lmasa olib tashlanishi mumkin.
+// import { LowStockProducts } from "@/components/Dashboard/LowStockProducts";
 import { useApp } from "@/context/AppContext"; // Taxminiy joylashuv
 import {
-  ShoppingCart,
-  DollarSign,
-  Layers,
+  ShoppingCart, // Jami sotuvlar soni uchun qoldirdim
+  DollarSign, // Eski ikonka, o'rniga Landmark/TrendingUp ishlatiladi
+  Layers, // Jami sotuvlar soni uchun alternativa bo'lishi mumkin
   Loader2,
   ChevronUp,
   ChevronDown,
   X,
+  TrendingUp, // Sof foyda uchun
+  Landmark, // Tushum uchun
+  Info, // Eslatma uchun
 } from "lucide-react";
 
 const API_URL_DASHBOARD =
-  "https://smartphone777.pythonanywhere.com/api/reports/dashboard/";
+  "http://nuriddin777.uz/api/reports/dashboard/";
 const API_URL_SALES_DETAILS =
-  "https://smartphone777.pythonanywhere.com/api/reports/sales/";
+  "http://nuriddin777.uz/api/reports/sales/";
 const API_URL_SALES_CHART =
-  "https://smartphone777.pythonanywhere.com/api/reports/sales-chart/";
+  "http://nuriddin777.uz/api/reports/sales-chart/";
 
 export default function Dashboard() {
-  const { currentStore } = useApp(); // Kontekstdan joriy do'konni olish
+  const { currentStore } = useApp();
   const [dashboardData, setDashboardData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true); // Asosiy ma'lumotlar uchun yuklanish holati
-  const [error, setError] = useState(null); // Asosiy ma'lumotlar xatoligi
-  const [periodType, setPeriodType] = useState("daily"); // Kunlik, oylik, umumiy
-  const [kassaId, setKassaId] = useState(currentStore?.id || 1); // Boshlang'ich kassa ID
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [periodType, setPeriodType] = useState("daily");
+  const [kassaId, setKassaId] = useState(currentStore?.id || 1);
 
-  // Sotuvlar tafsilotlari modal uchun holatlar
   const [isSalesDetailModalOpen, setIsSalesDetailModalOpen] = useState(false);
   const [salesDetailData, setSalesDetailData] = useState([]);
   const [isSalesDetailLoading, setIsSalesDetailLoading] = useState(false);
   const [salesDetailError, setSalesDetailError] = useState(null);
   const [salesDetailCurrency, setSalesDetailCurrency] = useState(null);
 
-  // Grafik uchun holatlar
   const [chartRawData, setChartRawData] = useState({
     labels: [],
     data: [],
@@ -44,16 +46,14 @@ export default function Dashboard() {
   });
   const [isChartLoading, setIsChartLoading] = useState(true);
   const [chartError, setChartError] = useState(null);
-  const [chartDisplayCurrency, setChartDisplayCurrency] = useState("UZS"); // Grafik uchun tanlangan valyuta
+  const [chartDisplayCurrency, setChartDisplayCurrency] = useState("UZS");
 
-  // Kassa ID sini kontekstdan yangilash
   useEffect(() => {
     if (currentStore?.id && currentStore.id !== kassaId) {
       setKassaId(currentStore.id);
     }
   }, [currentStore, kassaId]);
 
-  // Asosiy dashboard ma'lumotlarini olish
   const fetchData = useCallback(
     async (currentKassaId) => {
       setIsLoading(true);
@@ -101,12 +101,10 @@ export default function Dashboard() {
           setIsChartLoading(false);
           return;
         }
-
         let apiChartPeriod = chartPeriod;
         if (chartPeriod === "all") {
-          apiChartPeriod = "monthly";
+          apiChartPeriod = "monthly"; // API "all" uchun "monthly" kutishi mumkin
         }
-
         const response = await axios.get(API_URL_SALES_CHART, {
           headers: { Authorization: `Bearer ${token}` },
           params: {
@@ -121,7 +119,8 @@ export default function Dashboard() {
           data: response.data.data || [],
           currency: currencyForChart.toUpperCase(),
         });
-      } catch (err) {
+      } catch (err)
+      {
         console.error("Sales Chart API xatosi:", err);
         if (err.response?.status === 401) {
           setChartError("Grafik uchun sessiya muddati tugagan.");
@@ -161,7 +160,6 @@ export default function Dashboard() {
         kassa_id: kassaId,
         period_type: periodType,
       };
-
       if (currencyType !== "ALL_CURRENCIES") {
         params.currency = currencyType.toLowerCase();
       }
@@ -216,37 +214,45 @@ export default function Dashboard() {
     return isNaN(num) ? "0" : num.toLocaleString("uz-UZ");
   };
 
-  let sales_amount_usd = 0,
-    sales_amount_uzs = 0;
-  let sales_count_usd = 0,
-    sales_count_uzs = 0,
+  let cashflow_usd = 0,
+    cashflow_uzs = 0;
+  let net_profit_usd = 0,
+    net_profit_uzs = 0;
+  let sales_count_usd = 0, // Bu eski nom, backend javobiga qarab o'zgartirilishi mumkin
+    sales_count_uzs = 0, // Bu eski nom
     total_sales_count = 0;
   let cardTitlePrefix = "Joriy";
-  let salesChangePercentage =
-    parseFloat(dashboardData?.sales_change_percentage) || 0;
+  // Backend `sales_change_percentage` ni qaytarishini taxmin qilamiz.
+  // Ideal holda tushum va sof foyda uchun alohida foizlar bo'lishi kerak.
+  let changePercentage = parseFloat(dashboardData?.sales_change_percentage) || 0;
 
   if (dashboardData) {
     if (periodType === "daily") {
-      sales_amount_usd = dashboardData.today_profit_usd || 0;
-      sales_amount_uzs = dashboardData.today_profit_uzs || 0;
+      cashflow_usd = dashboardData.today_cashflow_usd || 0;
+      cashflow_uzs = dashboardData.today_cashflow_uzs || 0;
+      net_profit_usd = dashboardData.today_net_profit_usd || 0;
+      net_profit_uzs = dashboardData.today_net_profit_uzs || 0;
       sales_count_usd = dashboardData.today_sales_usd_count || 0;
       sales_count_uzs = dashboardData.today_sales_uzs_count || 0;
       cardTitlePrefix = "Kunlik";
     } else if (periodType === "monthly") {
-      sales_amount_usd = dashboardData.monthly_profit_usd || 0;
-      sales_amount_uzs = dashboardData.monthly_profit_uzs || 0;
+      cashflow_usd = dashboardData.monthly_cashflow_usd || 0;
+      cashflow_uzs = dashboardData.monthly_cashflow_uzs || 0;
+      net_profit_usd = dashboardData.monthly_net_profit_usd || 0;
+      net_profit_uzs = dashboardData.monthly_net_profit_uzs || 0;
       sales_count_usd = dashboardData.monthly_sales_usd_count || 0;
       sales_count_uzs = dashboardData.monthly_sales_uzs_count || 0;
       cardTitlePrefix = "Oylik";
     } else if (periodType === "all") {
-      sales_amount_usd = dashboardData.total_profit_usd || 0;
-      sales_amount_uzs = dashboardData.total_profit_uzs || 0;
+      cashflow_usd = dashboardData.total_cashflow_usd || 0; // Taxminiy kalit nomi
+      cashflow_uzs = dashboardData.total_cashflow_uzs || 0; // Taxminiy kalit nomi
+      net_profit_usd = dashboardData.total_net_profit_usd || 0; // Taxminiy kalit nomi
+      net_profit_uzs = dashboardData.total_net_profit_uzs || 0; // Taxminiy kalit nomi
       sales_count_usd = dashboardData.total_sales_usd_count || 0;
       sales_count_uzs = dashboardData.total_sales_uzs_count || 0;
       cardTitlePrefix = "Umumiy";
     }
-    total_sales_count =
-      (parseInt(sales_count_usd) || 0) + (parseInt(sales_count_uzs) || 0);
+    total_sales_count = (parseInt(sales_count_usd) || 0) + (parseInt(sales_count_uzs) || 0);
   }
 
   if (
@@ -280,30 +286,31 @@ export default function Dashboard() {
     );
   }
 
-  const lowStockItems = dashboardData?.low_stock_products || [];
+  // const lowStockItems = dashboardData?.low_stock_products || []; // Hali ishlatilmayapti
+
   const commonDesc =
     dashboardData?.sales_change_percentage !== undefined &&
     dashboardData?.sales_change_percentage !== null ? (
       <span
         className={`${
-          salesChangePercentage >= 0 ? "text-green-500" : "text-red-500"
+          changePercentage >= 0 ? "text-green-500" : "text-red-500"
         } flex items-center text-xs`}
       >
-        {salesChangePercentage >= 0 ? (
+        {changePercentage >= 0 ? (
           <ChevronUp className="h-4 w-4 mr-1" />
         ) : (
           <ChevronDown className="h-4 w-4 mr-1" />
         )}
-        {salesChangePercentage >= 0 ? "+" : ""}
-        {parseFloat(salesChangePercentage).toFixed(1)}% o'zgarish
+        {changePercentage >= 0 ? "+" : ""}
+        {parseFloat(changePercentage).toFixed(1)}% o'zgarish
       </span>
     ) : (
       "Oldingi davrga nisbatan"
     );
 
   let chartTitlePeriod = cardTitlePrefix;
-  if (periodType === "all") {
-    chartTitlePeriod = "Oylik";
+  if (periodType === "all" && chartTitlePeriod === "Umumiy") {
+    chartTitlePeriod = "Oylik"; // Grafik uchun "Umumiy" davrda oylik ko'rsatiladi
   }
 
   return (
@@ -349,7 +356,7 @@ export default function Dashboard() {
           <option value="all">Umumiy</option>
         </select>
 
-        <div className="mt-2 sm:mt-0 w-full sm:w-auto">
+        {/* <div className="mt-2 sm:mt-0 w-full sm:w-auto">
           <label
             htmlFor="chartCurrencySelect"
             className="text-sm text-muted-foreground mr-2 sr-only sm:not-sr-only"
@@ -366,33 +373,62 @@ export default function Dashboard() {
             <option value="UZS">UZS</option>
             <option value="USD">USD</option>
           </select>
+        </div> */}
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-md relative mb-4 text-sm" role="alert">
+        <div className="flex items-start">
+          <Info className="h-5 w-5 mr-2 mt-0.5 text-blue-600 flex-shrink-0" />
+          <div>
+            <strong className="font-semibold">Muhim eslatma:</strong>
+            <span className="block sm:inline ml-1">
+              Sof foyda to'g'ri hisoblanishi uchun mahsulotlarning tan narxlari (sotib olish narxi) tizimga kiritilgan bo'lishi shart.
+              Aks holda, tan narxi kiritilmagan mahsulotlar uchun foyda 0 deb hisoblanishi mumkin.
+            </span>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatsCard
-          title={`${cardTitlePrefix} sotuvlar (USD)`}
-          value={`${formatCurrency(sales_amount_usd)} USD`}
-          icon={<DollarSign className="h-5 w-5 text-blue-500" />}
+          title={`${cardTitlePrefix} tushum (USD)`}
+          value={`${formatCurrency(cashflow_usd)} USD`}
+          icon={<Landmark className="h-5 w-5 text-purple-500" />}
           description={commonDesc}
           onClick={() => fetchSalesDetails("USD")}
           className="cursor-pointer hover:shadow-lg transition-shadow"
         />
         <StatsCard
-          title={`${cardTitlePrefix} sotuvlar (UZS)`}
-          value={`${formatCurrency(sales_amount_uzs)} UZS`}
-          icon={<ShoppingCart className="h-5 w-5 text-green-500" />}
+          title={`${cardTitlePrefix} tushum (UZS)`}
+          value={`${formatCurrency(cashflow_uzs)} UZS`}
+          icon={<Landmark className="h-5 w-5 text-teal-500" />}
           description={commonDesc}
           onClick={() => fetchSalesDetails("UZS")}
           className="cursor-pointer hover:shadow-lg transition-shadow"
         />
-        <StatsCard
+         <StatsCard
           title={`${cardTitlePrefix} JAMI SOTUVLAR`}
           value={`${formatCount(total_sales_count)} dona`}
-          icon={<Layers className="h-5 w-5 text-indigo-500" />}
+          icon={<ShoppingCart className="h-5 w-5 text-orange-500" />} // Ikonkani Layers dan ShoppingCart ga o'zgartirdim
           description="Barcha valyutadagi tranzaksiyalar soni"
           onClick={() => fetchSalesDetails("ALL_CURRENCIES")}
           className="cursor-pointer hover:shadow-lg transition-shadow"
+        />
+        <StatsCard
+          title={`${cardTitlePrefix} sof foyda (USD)`}
+          value={`${formatCurrency(net_profit_usd)} USD`}
+          icon={<TrendingUp className="h-5 w-5 text-sky-500" />}
+          description={commonDesc} // Agar sof foyda uchun alohida o'zgarish foizi bo'lsa, shuni ishlatish kerak
+          // onClick={() => {}} Hozircha bosilmaydi
+          className="hover:shadow-lg transition-shadow" // Agar bosilmasa cursor-pointer olib tashlanadi
+        />
+        <StatsCard
+          title={`${cardTitlePrefix} sof foyda (UZS)`}
+          value={`${formatCurrency(net_profit_uzs)} UZS`}
+          icon={<TrendingUp className="h-5 w-5 text-lime-500" />}
+          description={commonDesc} // Agar sof foyda uchun alohida o'zgarish foizi bo'lsa, shuni ishlatish kerak
+          // onClick={() => {}} Hozircha bosilmaydi
+          className="hover:shadow-lg transition-shadow" // Agar bosilmasa cursor-pointer olib tashlanadi
         />
       </div>
 
@@ -400,8 +436,6 @@ export default function Dashboard() {
         <div className="lg:col-span-2 bg-card p-4 rounded-lg shadow">
           {isChartLoading && (
             <div className="flex items-center justify-center h-64">
-              {" "}
-              {/* Grafik balandligiga moslashtiring */}
               <Loader2 className="h-8 w-8 animate-spin mr-2 text-primary" />
               <p className="text-muted-foreground">Grafik yuklanmoqda...</p>
             </div>
@@ -436,6 +470,12 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+        {/* LowStockProducts komponenti uchun joy (agar kerak bo'lsa) */}
+        {/* {dashboardData && dashboardData.low_stock_products && dashboardData.low_stock_products.length > 0 && (
+          <div className="bg-card p-4 rounded-lg shadow">
+            <LowStockProducts products={dashboardData.low_stock_products} />
+          </div>
+        )} */}
       </div>
 
       {isSalesDetailModalOpen && (

@@ -10,11 +10,11 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-const API_URL = "https://smartphone777.pythonanywhere.com/api/installments/";
-const SALES_API_URL = "https://smartphone777.pythonanywhere.com/api/sales/";
-const KASSA_API_URL = "https://smartphone777.pythonanywhere.com/api/kassa/";
-const CUSTOMERS_API_URL = "https://smartphone777.pythonanywhere.com/api/customers/";
-const PRODUCTS_API_URL = "https://smartphone777.pythonanywhere.com/api/products/";
+const API_URL = "http://nuriddin777.uz/api/installments/";
+const SALES_API_URL = "http://nuriddin777.uz/api/sales/";
+const KASSA_API_URL = "http://nuriddin777.uz/api/kassa/";
+const CUSTOMERS_API_URL = "http://nuriddin777.uz/api/customers/";
+const PRODUCTS_API_URL = "http://nuriddin777.uz/api/products/";
 
 // API'dan kelgan ma'lumotlarga mos interfeys
 interface Installment {
