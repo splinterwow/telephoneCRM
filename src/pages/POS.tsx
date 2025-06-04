@@ -49,8 +49,9 @@ const formatPriceUSD = (value?: string | number | null): string => {
   );
 };
 
+// O'ZGARTIRILDI: Telefon raqamini tekshirish endi "+" belgisisiz format uchun
 const validatePhoneNumber = (phone: string): boolean => {
-  const phoneRegex = /^\+998\d{9}$/; // Format: +998XXXXXXXXX
+  const phoneRegex = /^998\d{9}$/; // Format: 998XXXXXXXXX (masalan, 998901234567)
   return phoneRegex.test(phone);
 };
 
@@ -63,7 +64,7 @@ interface ProductFromApi {
   price_usd?: string | null;
   quantity_in_stock: number;
   barcode?: string | null;
-  type: "phone" | "accessory"; // Bu endi fetchProducts da aniqlanadi va majburiy
+  type: "phone" | "accessory";
   category_name?: string;
 }
 
@@ -75,7 +76,7 @@ interface SalePayloadItem {
 
 interface NewCustomerDataForSale {
     full_name: string;
-    phone_number: string;
+    phone_number: string; // Bu API ga +998... formatida yuboriladi
     address?: string;
 }
 
@@ -92,7 +93,7 @@ interface PaginatedProductResponse {
   count: number;
   next: string | null;
   previous: string | null;
-  results: any[]; // API dan keladigan Product tipini aniqroq yozish kerak bo'ladi
+  results: any[];
 }
 
 
@@ -151,7 +152,7 @@ const ProductCard = ({ product, disabled, onCardClick }: {
 
 
 // --- API URL manzillari ---
-const API_BASE_URL = "https://smartphone777.pythonanywhere.com/api";
+const API_BASE_URL = "http://nuriddin777.uz/api";
 const API_POS_PRODUCTS_URL = (kassaId: number, searchTerm?: string, pageUrl?: string) => {
   if (pageUrl) return pageUrl;
   let url = `${API_BASE_URL}/pos/products/?kassa_id=${kassaId}`;
@@ -184,7 +185,7 @@ export default function PosPage() {
   const [isSubmittingDirectSale, setIsSubmittingDirectSale] = useState(false);
 
   const [customerFullName, setCustomerFullName] = useState<string>("");
-  const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
+  const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>(""); // Bu yerda 998... formatida saqlanadi
   const [customerAddress, setCustomerAddress] = useState<string>("");
 
   const currentKassaId = useMemo(() => currentStore?.id || 1, [currentStore]);
@@ -202,29 +203,50 @@ export default function PosPage() {
       const targetUrl = url || API_POS_PRODUCTS_URL(kassaId, search);
       const response = await axios.get<PaginatedProductResponse>(targetUrl, { headers: { Authorization: `Bearer ${token}` }, timeout: 20000 });
 
-      let fetchedProductsData: any[] = response.data.results || []; // API dan keladigan asl Product tipi
+      let fetchedProductsData: any[] = response.data.results || [];
       let nextPage: string | null = response.data.next;
       
       const productsWithNormalizedData: ProductFromApi[] = fetchedProductsData.map((p: any) => {
         const pNameLower = p.name?.toLowerCase() || "";
         const pCategoryNameLower = p.category_name?.toLowerCase() || "";
-        // Mahsulot turini aniqlash (Telefon yoki Aksessuar)
         const isPhone = pCategoryNameLower.includes("telefon") || 
                         pCategoryNameLower.includes("phone") ||
-                        pCategoryNameLower.includes("смартфон") || // Rus tilida ham tekshirish
+                        pCategoryNameLower.includes("смартфон") ||
                         pNameLower.includes("phone") || 
                         pNameLower.includes("iphone") ||
-                        pNameLower.includes("samsung") || // Mashhur brendlar
+                        pNameLower.includes("samsung") ||
                         pNameLower.includes("redmi") ||
                         pNameLower.includes("xiaomi") ||
                         pNameLower.includes("galaxy") ||
-                        pNameLower.match(/\b(a|s|m|f|z)\d{1,2}\b/i); // Samsung modellariga o'xshash
+                        pNameLower.match(/\b(a|s|m|f|z)\d{1,2}\b/i);
 
+        let priceUzsRaw = p.price_uzs?.toString() || null;
+        let priceUsdRaw = p.price_usd?.toString() || null;
+
+        let finalPriceUzs: string | null = null;
+        let finalPriceUsd: string | null = null;
+
+        const uzsNum = priceUzsRaw ? parseFloat(priceUzsRaw) : null;
+        const usdNum = priceUsdRaw ? parseFloat(priceUsdRaw) : null;
+
+        if (uzsNum !== null && uzsNum > 0) {
+          finalPriceUzs = uzsNum.toString();
+          if ((usdNum === null || usdNum === 0) && UZS_USD_RATE > 0) {
+            finalPriceUsd = (uzsNum / UZS_USD_RATE).toFixed(2);
+          } else if (usdNum !== null && usdNum > 0) {
+            finalPriceUsd = usdNum.toString();
+          }
+        } else if (usdNum !== null && usdNum > 0) {
+          finalPriceUsd = usdNum.toString();
+          if ((uzsNum === null || uzsNum === 0) && UZS_USD_RATE > 0) {
+            finalPriceUzs = Math.round(usdNum * UZS_USD_RATE).toString();
+          }
+        }
         return {
           id: p.id,
           name: p.name,
-          price_uzs: p.price_uzs?.toString() || null,
-          price_usd: p.price_usd?.toString() || null,
+          price_uzs: finalPriceUzs,
+          price_usd: finalPriceUsd,
           quantity_in_stock: p.quantity_in_stock,
           barcode: p.barcode?.trim() || null,
           category_name: p.category_name,
@@ -252,7 +274,7 @@ export default function PosPage() {
     } finally {
       if (isLoadMore) setIsLoadingMore(false); else setIsLoading(false);
     }
-  }, []);
+  }, [UZS_USD_RATE]);
 
   useEffect(() => {
     const timerId = setTimeout(() => setDebouncedSearchTerm(searchTerm), 500);
@@ -277,8 +299,9 @@ export default function PosPage() {
     }
     const hasUzs = product.price_uzs && parseFloat(product.price_uzs) > 0;
     const hasUsd = product.price_usd && parseFloat(product.price_usd) > 0;
+
     if (!hasUzs && !hasUsd) {
-      toast.warning(`"${product.name}" uchun narx belgilanmagan. Sotish mumkin emas.`);
+      toast.warning(`"${product.name}" uchun narx belgilanmagan yoki hisoblab bo'lmadi. Sotish mumkin emas.`);
       return;
     }
     setSelectedProductForSale(product);
@@ -321,23 +344,24 @@ export default function PosPage() {
     }
 
     let newCustomerPayloadForSale: NewCustomerDataForSale | null = null;
+    const trimmedPhoneNumber = customerPhoneNumber.trim(); // O'ZGARTIRILDI: trim qilingan raqamni olish
 
-    if (selectedProductForSale.type === 'phone') { // Faqat telefon uchun mijoz ma'lumotlari
+    if (selectedProductForSale.type === 'phone') {
       if (!customerFullName.trim()) {
           toast.error("Mijozning ism-familiyasi kiritilishi shart (telefon sotuvi uchun).");
           return;
       }
-      if (!customerPhoneNumber.trim()) {
+      if (!trimmedPhoneNumber) { // O'ZGARTIRILDI: trim qilingan raqamni tekshirish
           toast.error("Mijozning telefon raqami kiritilishi shart (telefon sotuvi uchun).");
           return;
       }
-      if (!validatePhoneNumber(customerPhoneNumber.trim())) {
-          toast.error("Telefon raqami noto'g'ri formatda kiritilgan. Masalan: +998901234567");
+      if (!validatePhoneNumber(trimmedPhoneNumber)) { // O'ZGARTIRILDI: trim qilingan raqamni validatsiya qilish
+          toast.error("Telefon raqami noto'g'ri formatda kiritilgan. Masalan: 998901234567");
           return;
       }
       newCustomerPayloadForSale = {
           full_name: customerFullName.trim(),
-          phone_number: customerPhoneNumber.trim(),
+          phone_number: `+${trimmedPhoneNumber}`, // O'ZGARTIRILDI: APIga yuborishda "+" qo'shiladi
       };
       if (customerAddress.trim()) newCustomerPayloadForSale.address = customerAddress.trim();
     }
@@ -503,16 +527,17 @@ export default function PosPage() {
                 <DialogDescription>
                     Mahsulot sotuvi uchun {isCustomerInfoRequired ? "mijoz ma'lumotlarini va " : ""}sotuv narxini kiriting.
                     {isCustomerInfoRequired && <><span className="text-destructive"> *</span> bilan belgilangan maydonlar majburiy.</>}
+                    {isCustomerInfoRequired && <span className="block text-xs mt-1">Telefon raqamini 998901234567 formatida kiriting.</span>} {/* O'ZGARTIRILDI: Format eslatmasi */}
                 </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-3 custom-scrollbar">
               <div className="text-sm space-y-1 bg-gray-50 p-3 rounded-md border">
-                <p><strong>Asl narxi:</strong></p>
+                <p><strong>Asl narxi (API dan + hisoblangan):</strong></p>
                 <div className="pl-2">{getDisplayPriceElements(selectedProductForSale)}</div>
                 <p><strong>Omborda mavjud:</strong> {selectedProductForSale.quantity_in_stock} dona</p>
               </div>
 
-              {isCustomerInfoRequired && ( // Faqat telefon uchun mijoz ma'lumotlari ko'rsatiladi
+              {isCustomerInfoRequired && (
                 <div className="space-y-3 border-t pt-4 mt-3">
                   <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
                       <UserPlus className="mr-2 h-4 w-4 text-gray-500"/>
@@ -528,7 +553,14 @@ export default function PosPage() {
                       <label htmlFor="modalCustomerPhoneNumber" className="block text-xs font-medium text-gray-700 mb-0.5">
                           Telefon raqami <span className="text-destructive">*</span>
                       </label>
-                      <Input id="modalCustomerPhoneNumber" type="tel" value={customerPhoneNumber} onChange={(e) => setCustomerPhoneNumber(e.target.value)} placeholder="+998901234567" />
+                      {/* O'ZGARTIRILDI: type="number" va placeholder */}
+                      <Input 
+                        id="modalCustomerPhoneNumber" 
+                        type="number" 
+                        value={customerPhoneNumber} 
+                        onChange={(e) => setCustomerPhoneNumber(e.target.value)} 
+                        placeholder="998901234567" 
+                      />
                   </div>
                   <div>
                       <label htmlFor="modalCustomerAddress" className="block text-xs font-medium text-gray-700 mb-0.5">
@@ -541,7 +573,7 @@ export default function PosPage() {
 
               <div className="space-y-3 border-t pt-4 mt-3">
                 <h3 className="text-sm font-medium text-gray-700">To'lov: Naqd</h3>
-                {hasUzsPriceForSelected && hasUsdPriceForSelected && (
+                {(hasUzsPriceForSelected && hasUsdPriceForSelected) && (
                     <div className="flex items-center space-x-2">
                         <p className="text-xs font-medium text-gray-600">Sotuv valyutasi:</p>
                         <Button variant={saleCurrency === 'UZS' ? 'default' : 'outline'} size="sm" onClick={() => { setSaleCurrency('UZS'); if (selectedProductForSale.price_uzs) setActualSalePrice(selectedProductForSale.price_uzs); }}>UZS</Button>
@@ -577,9 +609,15 @@ export default function PosPage() {
                   onClick={handleSubmitDirectSale}
                   disabled={
                     isSubmittingDirectSale ||
-                    parseFloat(actualSalePrice) <= 0 ||
-                    isNaN(parseFloat(actualSalePrice)) ||
-                    (isCustomerInfoRequired && (!customerFullName.trim() || !customerPhoneNumber.trim() || !validatePhoneNumber(customerPhoneNumber.trim())))
+                    parseFloat(actualSalePrice) <= 0 || // Narx 0 dan katta bo'lishi kerak
+                    isNaN(parseFloat(actualSalePrice)) || // Narx raqam bo'lishi kerak
+                    (isCustomerInfoRequired && // Agar mijoz ma'lumoti kerak bo'lsa (telefon sotuvida)
+                        (
+                            !customerFullName.trim() || // Ism-familiya bo'sh bo'lmasligi kerak
+                            !customerPhoneNumber.trim() || // Telefon raqam bo'sh bo'lmasligi kerak
+                            !validatePhoneNumber(customerPhoneNumber.trim()) // Telefon raqam validatsiyadan o'tishi kerak (998XXXXXXXXX format)
+                        )
+                    )
                   }
                   className="bg-green-600 hover:bg-green-700 text-white"
                 >

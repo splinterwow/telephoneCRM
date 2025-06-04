@@ -1,12 +1,1 @@
-{
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "http://nuriddin777.uz/api/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/"
-    }
-  ]
-}
+{ "rewrites": [{ "source": "/(.*)", "destination": "/" }] }

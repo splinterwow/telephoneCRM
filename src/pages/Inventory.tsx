@@ -62,7 +62,7 @@ interface InventoryOperation {
 // Yangi mahsulot qo'shish uchun forma ma'lumotlari
 interface NewInventoryItem {
   product_id: number;
-  quantity: number; // Bu yerda number bo'lishi kerak
+  quantity: number;
   comment: string;
   kassa_id: number;
 }
@@ -105,7 +105,7 @@ export default function Inventory() {
   const [kassaList, setKassaList] = useState<Kassa[]>([]);
   const [newItem, setNewItem] = useState<NewInventoryItem>({
     product_id: 0,
-    quantity: 1, // Boshlang'ich qiymat 1
+    quantity: 1,
     comment: "",
     kassa_id: 0,
   });
@@ -196,20 +196,45 @@ export default function Inventory() {
       return;
     }
     if (newItem.kassa_id === 0) {
-      toast.error("Iltimos, kassani tanlang!");
+      // Agar kassaList bo'sh bo'lsa va newItem.kassa_id hali ham 0 bo'lsa,
+      // bu kassa yo'qligini va qo'shilmaganligini bildiradi.
+      // Yoki, agar bitta kassa bo'lsa, uni avtomatik tanlash mumkin.
+      // Hozircha, kassa tanlanishini talab qilamiz.
+      if (kassaList.length === 0) {
+        toast.error("Avval kassani qo'shing!");
+        return;
+      } else if (kassaList.length === 1 && newItem.kassa_id === 0) {
+        // Agar faqat bitta kassa bo'lsa va foydalanuvchi tanlamagan bo'lsa,
+        // uni avtomatik tanlaymiz.
+        // Bu qismni olib tashlashingiz yoki o'zgartirishingiz mumkin.
+        // Hozircha bu logikani qoldirmaymiz, foydalanuvchi o'zi tanlasin.
+         toast.error("Iltimos, kassani tanlang!");
+         return;
+      } else if (newItem.kassa_id === 0) {
+        toast.error("Iltimos, kassani tanlang!");
+        return;
+      }
+    }
+    if (newItem.quantity <= 0) { 
+      toast.error("Miqdor musbat son bo‘lishi kerak!");
       return;
     }
-    // if (newItem.quantity <= 0) { // Miqdor 0 dan katta bo'lishi kerak
-    //   toast.error("Miqdor musbat son bo‘lishi kerak!");
-    //   return;
-    // }
 
     try {
       const headers = getAuthHeaders();
+      const body = { ...newItem };
+      // Agar faqat bitta kassa bo'lsa va newItem.kassa_id 0 bo'lsa (foydalanuvchi tanlamagan bo'lsa),
+      // shu yagona kassaning ID sini avtomatik o'rnatamiz.
+      // Lekin "Kassani tanlang" degan xabar bilan yuqorida buni oldini oldik.
+      // Agar kelajakda avtomatik tanlash kerak bo'lsa, shu yerga logika qo'shiladi.
+      // if (kassaList.length === 1 && body.kassa_id === 0) {
+      //   body.kassa_id = kassaList[0].id;
+      // }
+
       const response = await fetch(INVENTORY_ADD_URL, {
         method: "POST",
         headers,
-        body: JSON.stringify(newItem),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -217,7 +242,7 @@ export default function Inventory() {
       }
       toast.success("Mahsulot muvaffaqiyatli qo'shildi!");
       setAddModalOpen(false);
-      setNewItem({ product_id: 0, quantity: 1, comment: "", kassa_id: 0 });
+      setNewItem({ product_id: 0, quantity: 1, comment: "", kassa_id: kassaList.length === 1 ? kassaList[0].id : 0 });
       fetchInventory();
     } catch (err: any) {
       toast.error(err.message);
@@ -228,6 +253,14 @@ export default function Inventory() {
   };
 
   const addKassa = async () => {
+    // Qo'shimcha tekshiruv: Agar kassaList allaqachon elementga ega bo'lsa, qo'shishni rad etish
+    if (kassaList.length > 0) {
+      toast.error("Tizimda faqat bitta kassa bo'lishi mumkin. Yangi kassa qo'shib bo'lmaydi.");
+      setAddKassaModalOpen(false); // Modalni yopish
+      setNewKassa({ name: "", location: "", is_active: true }); // Formani tozalash
+      return;
+    }
+
     if (!newKassa.name.trim()) {
       toast.error("Kassa nomini kiriting!");
       return;
@@ -251,7 +284,17 @@ export default function Inventory() {
       toast.success("Kassa muvaffaqiyatli qo'shildi!");
       setAddKassaModalOpen(false);
       setNewKassa({ name: "", location: "", is_active: true });
-      fetchKassa();
+      await fetchKassa(); // Kassani qayta yuklash
+
+      // Yangi kassa qo'shilgandan so'ng, newItem.kassa_id ni avtomatik o'rnatish
+      // (agar mahsulot qo'shish modalida kassa tanlanmagan bo'lsa)
+      // Bu kassaList yangilangandan keyin amalga oshishi kerak
+      // Lekin, kassaList yangilanishi asinxron bo'lgani uchun,
+      // to'g'ridan-to'g'ri yangi kassa ID sini olish qiyinroq.
+      // Eng yaxshisi, foydalanuvchi mahsulot qo'shishda tanlaydi yoki
+      // agar faqat bitta kassa bo'lsa, addInventoryItem ichida uni o'rnatiladi.
+      // Hozircha, newItem.kassa_id ni mahsulot qo'shish modalida tanlashga qoldiramiz.
+
     } catch (err: any) {
       toast.error(err.message);
       if (err.message.includes("Ruxsat berilmagan") || err.message.includes("Sessiya topilmadi")) {
@@ -267,7 +310,7 @@ export default function Inventory() {
         method: "POST",
         headers,
         body: JSON.stringify({
-          product_id: deleteState.item?.product.id || deleteItem.product_id,
+          product_id: deleteItem.product_id,
           quantity: deleteItem.quantity,
           kassa_id: deleteItem.kassa_id,
           comment: deleteItem.comment || "",
@@ -283,7 +326,7 @@ export default function Inventory() {
         open: false,
         operationResult: data,
         quantity: null,
-        kassa_id: 0,
+        kassa_id: kassaList.length === 1 ? kassaList[0].id : 0,
         comment: "",
         removeAll: false,
       }));
@@ -298,14 +341,29 @@ export default function Inventory() {
   };
 
   useEffect(() => {
-    fetchInventory();
-    fetchProducts();
-    fetchKassa();
+    const initializeData = async () => {
+      await fetchKassa(); // Avval kassa yuklanadi
+      await fetchInventory();
+      await fetchProducts();
+    };
+    initializeData();
   }, []);
 
-  const filteredData = inventoryData.filter((item) =>
-    item.product.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // newItem va deleteState uchun kassa_id ni avtomatik sozlash, agar faqat bitta kassa bo'lsa
+  useEffect(() => {
+    if (kassaList.length === 1) {
+      const singleKassaId = kassaList[0].id;
+      setNewItem(prev => ({ ...prev, kassa_id: prev.kassa_id === 0 ? singleKassaId : prev.kassa_id }));
+      setDeleteState(prev => ({ ...prev, kassa_id: prev.kassa_id === 0 ? singleKassaId : prev.kassa_id }));
+    }
+  }, [kassaList]);
+
+
+  const filteredData = inventoryData
+    .filter((item) => item.quantity > 0) 
+    .filter((item) =>
+      item.product.name.toLowerCase().includes(search.toLowerCase())
+    );
 
   return (
     <div className="space-y-6 p-4 md:p-6 animate-fade-in">
@@ -314,20 +372,29 @@ export default function Inventory() {
           Ombor
         </h1>
         <div className="flex gap-2">
-          <Button
-            className="flex items-center gap-2 bg-pos-primary text-white hover:bg-pos-secondary"
-            onClick={() => setAddKassaModalOpen(true)}
-          >
-            <Building className="h-4 w-4" />
-            Kassa qo‘shish
-          </Button>
+          {/* Kassa qo'shish tugmasi faqat kassa mavjud bo'lmaganda ko'rsatiladi */}
+          {kassaList.length === 0 && (
+            <Button
+              className="flex items-center gap-2 bg-pos-primary text-white hover:bg-pos-secondary"
+              onClick={() => setAddKassaModalOpen(true)}
+            >
+              <Building className="h-4 w-4" />
+              Kassa qo‘shish
+            </Button>
+          )}
           <Button
             className="flex items-center gap-2 bg-pos-primary text-white hover:bg-pos-secondary"
             onClick={() => {
-              // Modal ochilganda formani boshlang'ich holatga keltirish
-              setNewItem({ product_id: 0, quantity: 1, comment: "", kassa_id: 0 });
+              setNewItem({ 
+                product_id: 0, 
+                quantity: 1, 
+                comment: "", 
+                kassa_id: kassaList.length === 1 ? kassaList[0].id : 0 // Agar bitta kassa bo'lsa, avtomatik tanlash
+              });
               setAddModalOpen(true);
             }}
+            disabled={kassaList.length === 0} // Agar kassa yo'q bo'lsa, mahsulot qo'shishni bloklash
+            title={kassaList.length === 0 ? "Avval kassa qo'shing" : "Mahsulot qo'shish"}
           >
             <Plus className="h-4 w-4" />
             Mahsulot qo‘shish
@@ -402,7 +469,8 @@ export default function Inventory() {
                           setDeleteState({
                             item,
                             quantity: null,
-                            kassa_id: 0,
+                            // Agar faqat bitta kassa bo'lsa, avtomatik tanlash
+                            kassa_id: kassaList.length === 1 ? kassaList[0].id : 0, 
                             comment: "",
                             removeAll: false,
                             open: true,
@@ -410,6 +478,8 @@ export default function Inventory() {
                           })
                         }
                         className="text-red-600 hover:text-red-800"
+                        disabled={kassaList.length === 0} // Agar kassa yo'q bo'lsa, o'chirishni bloklash
+                        title={kassaList.length === 0 ? "Avval kassa qo'shing" : "Mahsulotni o'chirish"}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -450,27 +520,21 @@ export default function Inventory() {
               <span className="font-bold text-pos-primary">Miqdor:</span>
               <Input
                 type="number"
-                min="0" // Minimal qiymatni 0 qilib belgilaymiz
-                value={newItem.quantity} // state'dagi quantity ga bog'laymiz
+                min="1" // Minimal miqdor 1 bo'lishi kerak
+                value={newItem.quantity === 0 ? "" : newItem.quantity} // 0 ni bo'sh satr sifatida ko'rsatish
                 onChange={(e) => {
                   const valueString = e.target.value;
-                  let newQuantity: number;
+                  let updatedQuantity = newItem.quantity; 
 
                   if (valueString === "") {
-                    // Agar input bo'sh bo'lsa, 0 ga o'rnatamiz
-                    // Saqlashda validatsiya (quantity > 0) buni tekshiradi
-                    // newQuantity = 0;
+                    updatedQuantity = 0; // Agar bo'sh bo'lsa 0
                   } else {
                     const parsedNum = Number(valueString);
-                    // Yaroqli musbat son yoki 0 bo'lsa
                     if (!isNaN(parsedNum) && parsedNum >= 0) {
-                      newQuantity = parsedNum;
-                    } else {
-                      // Yaroqsiz qiymatda o'zgartirmaymiz, eski qiymat qoladi
-                      newQuantity = newItem.quantity;
+                      updatedQuantity = parsedNum;
                     }
                   }
-                  setNewItem({ ...newItem, quantity: newQuantity });
+                  setNewItem({ ...newItem, quantity: updatedQuantity });
                 }}
                 placeholder="Miqdor"
                 className="border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
@@ -488,31 +552,45 @@ export default function Inventory() {
                 className="border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
               />
             </div>
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Kassa:</span>
-              <select
-                value={newItem.kassa_id}
-                onChange={(e) =>
-                  setNewItem({ ...newItem, kassa_id: parseInt(e.target.value) || 0 })
-                }
-                className="w-full p-2 border border-pos-accent bg-pos-background rounded focus:ring-2 focus:ring-pos-primary"
-              >
-                <option value={0}>Kassani tanlang</option>
-                {kassaList.map((kassa) => (
-                  <option key={kassa.id} value={kassa.id}>
-                    {kassa.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Kassa tanlash inputi, agar bir nechta kassa bo'lsa ko'rsatiladi */}
+            {kassaList.length > 1 && (
+                <div className="grid grid-cols-2 items-center gap-4">
+                <span className="font-bold text-pos-primary">Kassa:</span>
+                <select
+                    value={newItem.kassa_id}
+                    onChange={(e) =>
+                    setNewItem({ ...newItem, kassa_id: parseInt(e.target.value) || 0 })
+                    }
+                    className="w-full p-2 border border-pos-accent bg-pos-background rounded focus:ring-2 focus:ring-pos-primary"
+                >
+                    <option value={0}>Kassani tanlang</option>
+                    {kassaList.map((kassa) => (
+                    <option key={kassa.id} value={kassa.id}>
+                        {kassa.name}
+                    </option>
+                    ))}
+                </select>
+                </div>
+            )}
+            {/* Agar faqat bitta kassa bo'lsa, uni ko'rsatish (tanlash imkoniyatisiz) */}
+            {kassaList.length === 1 && (
+                 <div className="grid grid-cols-2 items-center gap-4">
+                    <span className="font-bold text-pos-primary">Kassa:</span>
+                    <span>{kassaList[0].name}</span>
+                 </div>
+            )}
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
                 setAddModalOpen(false);
-                // Formani boshlang'ich holatga qaytarish
-                setNewItem({ product_id: 0, quantity: 1, comment: "", kassa_id: 0 });
+                setNewItem({ 
+                    product_id: 0, 
+                    quantity: 1, 
+                    comment: "", 
+                    kassa_id: kassaList.length === 1 ? kassaList[0].id : 0 
+                });
               }}
               className="bg-pos-accent text-white hover:bg-pos-secondary"
             >
@@ -601,7 +679,7 @@ export default function Inventory() {
             open: false,
             item: null,
             quantity: null,
-            kassa_id: 0,
+            kassa_id: kassaList.length === 1 ? kassaList[0].id : 0,
             comment: "",
             removeAll: false,
             operationResult: null,
@@ -625,25 +703,25 @@ export default function Inventory() {
               <span className="font-bold text-pos-primary">O‘chiriladigan miqdor:</span>
               <Input
                 type="number"
-                min="0"
-                value={deleteState.quantity === null ? "" : deleteState.quantity}
+                min="1" // Minimal miqdor 1
+                value={deleteState.quantity === null || deleteState.quantity === 0 ? "" : deleteState.quantity}
                 onChange={(e) => {
                   const valueString = e.target.value;
                   let newQuantity: number | null;
                    if (valueString === "") {
-                    newQuantity = null; // Yoki 0, agar null bo'lsa, validatsiya xato beradi
+                    newQuantity = null; 
                   } else {
                     const parsedNum = Number(valueString);
                     if(!isNaN(parsedNum) && parsedNum >=0){
                         newQuantity = parsedNum;
                     } else {
-                        newQuantity = deleteState.quantity; // Eski qiymat
+                        newQuantity = deleteState.quantity;
                     }
                   }
                   setDeleteState({
                     ...deleteState,
                     quantity: newQuantity,
-                    removeAll: newQuantity !== null && newQuantity === deleteState.item?.quantity,
+                    removeAll: newQuantity !== null && deleteState.item !== null && newQuantity === deleteState.item.quantity,
                   });
                 }}
                 placeholder="Miqdor"
@@ -658,28 +736,38 @@ export default function Inventory() {
                   setDeleteState({
                     ...deleteState,
                     removeAll: !!checked,
-                    quantity: checked ? deleteState.item?.quantity || 0 : deleteState.quantity,
+                    quantity: checked && deleteState.item ? deleteState.item.quantity : (deleteState.quantity === 0 ? null : deleteState.quantity),
                   })
                 }
               />
             </div>
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Kassa:</span>
-              <select
-                value={deleteState.kassa_id}
-                onChange={(e) =>
-                  setDeleteState({ ...deleteState, kassa_id: parseInt(e.target.value) || 0 })
-                }
-                className="w-full p-2 border border-pos-accent bg-pos-background rounded focus:ring-2 focus:ring-pos-primary"
-              >
-                <option value={0}>Kassani tanlang</option>
-                {kassaList.map((kassa) => (
-                  <option key={kassa.id} value={kassa.id}>
-                    {kassa.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+             {/* Kassa tanlash inputi, agar bir nechta kassa bo'lsa ko'rsatiladi */}
+            {kassaList.length > 1 && (
+                <div className="grid grid-cols-2 items-center gap-4">
+                <span className="font-bold text-pos-primary">Kassa:</span>
+                <select
+                    value={deleteState.kassa_id}
+                    onChange={(e) =>
+                    setDeleteState({ ...deleteState, kassa_id: parseInt(e.target.value) || 0 })
+                    }
+                    className="w-full p-2 border border-pos-accent bg-pos-background rounded focus:ring-2 focus:ring-pos-primary"
+                >
+                    <option value={0}>Kassani tanlang</option>
+                    {kassaList.map((kassa) => (
+                    <option key={kassa.id} value={kassa.id}>
+                        {kassa.name}
+                    </option>
+                    ))}
+                </select>
+                </div>
+            )}
+            {/* Agar faqat bitta kassa bo'lsa, uni ko'rsatish (tanlash imkoniyatisiz) */}
+            {kassaList.length === 1 && (
+                 <div className="grid grid-cols-2 items-center gap-4">
+                    <span className="font-bold text-pos-primary">Kassa:</span>
+                    <span>{kassaList[0].name}</span>
+                 </div>
+            )}
             <div className="grid grid-cols-2 items-center gap-4">
               <span className="font-bold text-pos-primary">Izoh:</span>
               <Input
@@ -702,7 +790,7 @@ export default function Inventory() {
                   open: false,
                   item: null,
                   quantity: null,
-                  kassa_id: 0,
+                  kassa_id: kassaList.length === 1 ? kassaList[0].id : 0,
                   comment: "",
                   removeAll: false,
                   operationResult: null,
@@ -718,9 +806,12 @@ export default function Inventory() {
                   toast.error("Mahsulot tanlanmagan!");
                   return;
                 }
-                if (deleteState.kassa_id === 0) {
-                  toast.error("Iltimos, kassani tanlang!");
-                  return;
+                if (deleteState.kassa_id === 0 && kassaList.length > 0) { // Agar kassalar bo'lsa, lekin tanlanmagan bo'lsa
+                    toast.error("Iltimos, kassani tanlang!");
+                    return;
+                } else if (kassaList.length === 0) { // Agar umuman kassa yo'q bo'lsa
+                    toast.error("Tizimda kassa mavjud emas. Avval kassa qo'shing.");
+                    return;
                 }
                 if (deleteState.quantity === null || deleteState.quantity <= 0) {
                   toast.error("Miqdor musbat son bo‘lishi kerak!");
@@ -734,7 +825,8 @@ export default function Inventory() {
                 removeInventoryItem({
                   product_id: deleteState.item.product.id,
                   quantity: deleteState.quantity,
-                  kassa_id: deleteState.kassa_id,
+                  // Agar faqat bitta kassa bo'lsa va deleteState.kassa_id 0 bo'lsa, o'sha yagona kassani ishlatamiz
+                  kassa_id: deleteState.kassa_id === 0 && kassaList.length === 1 ? kassaList[0].id : deleteState.kassa_id,
                   comment: deleteState.comment || "",
                 });
               }}

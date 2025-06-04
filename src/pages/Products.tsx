@@ -190,12 +190,11 @@ export default function ProductsPage() {
       let options: Intl.NumberFormatOptions = {};
       if (currency === "$") {
         options = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
-        // Agar AQSh dollaridagi narx butun son bo'lsa (masalan, $123), .00 qismini ko'rsatmaslik uchun
         if (numericPrice % 1 === 0) {
           options = { maximumFractionDigits: 0 };
         }
-      } else { // so'm uchun
-        options = { maximumFractionDigits: 0 }; // So'm uchun har doim butun son
+      } else {
+        options = { maximumFractionDigits: 0 };
       }
       const formatted = numericPrice.toLocaleString(
         currency === "$" ? "en-US" : "uz-UZ",
@@ -209,7 +208,8 @@ export default function ProductsPage() {
   const formatCombinedPrice = useCallback(
     (
       priceUsdStr: string | null | undefined,
-      priceUzsStr: string | null | undefined
+      priceUzsStr: string | null | undefined,
+      forPrintLabel: boolean = false // Yorliq uchun maxsus format
     ): string => {
       const usdValid = priceUsdStr && !isNaN(parseFloat(priceUsdStr)) && parseFloat(priceUsdStr) >= 0;
       const uzsValid = priceUzsStr && !isNaN(parseFloat(priceUzsStr)) && parseFloat(priceUzsStr) >= 0;
@@ -218,12 +218,10 @@ export default function ProductsPage() {
       const uzsFormatted = uzsValid ? formatPriceForTable(priceUzsStr, "so'm") : null;
 
       if (usdFormatted && uzsFormatted) {
-        // Agar ikkala narx ham 0 bo'lsa (yoki undan kichik, lekin bu holat validatsiyada oldini olinishi kerak)
-        // Misol: "$0 / 0 so'm" ko'rinishida.
-        return `${usdFormatted} / ${uzsFormatted}`;
+        return forPrintLabel ? `${uzsFormatted} / ${usdFormatted}` : `${usdFormatted} / ${uzsFormatted}`;
       }
+      if (uzsFormatted) return uzsFormatted; // Yorliq uchun birinchi UZS ni afzal ko'ramiz
       if (usdFormatted) return usdFormatted;
-      if (uzsFormatted) return uzsFormatted;
       return "-";
     },
     [formatPriceForTable]
@@ -566,18 +564,32 @@ export default function ProductsPage() {
         if (!p.barcode) return "";
 
         const details: string[] = [];
-        if (p.storage_capacity) details.push(`Xotira: ${p.storage_capacity}`);
         const pType = determineProductTypeForDisplay(p);
-        if (pType === "iPhone" && p.battery_health)
-          details.push(`Batareya: ${p.battery_health}%`);
-        if (pType === "iPhone" && p.series_region)
-            details.push(`Region: ${p.series_region}`);
-        if (pType === "Aksesuar" && p.description)
-          details.push(
-            `${p.description.substring(0, 25)}${
-              p.description.length > 25 ? "..." : ""
-            }`
-          );
+
+        if (pType === "iPhone") {
+            if (p.storage_capacity) details.push(`Xotira: ${p.storage_capacity}`);
+            if (p.battery_health) details.push(`Batareya: ${p.battery_health}%`);
+            if (p.series_region) details.push(`Region: ${p.series_region}`);
+        } else if (pType === "Android") {
+            if (p.storage_capacity) details.push(`Xotira: ${p.storage_capacity}`);
+            // Android uchun boshqa kerakli ma'lumotlar
+        } else if (pType === "Aksesuar") {
+            // --- O'ZGARTIRILDI: Aksessuar uchun izoh o'rniga narx ---
+            const priceString = formatCombinedPrice(p.price_usd, p.price_uzs, true);
+            if (priceString && priceString !== "-") {
+                details.push(priceString);
+            }
+            // Agar narx yo'q bo'lsa, izohni qisqartirib ko'rsatish mumkin (ixtiyoriy)
+            // else if (p.description) {
+            //   details.push(
+            //     `${p.description.substring(0, 25)}${
+            //       p.description.length > 25 ? "..." : ""
+            //     }`
+            //   );
+            // }
+            // --- ---
+        }
+
 
         const detailsHtml =
           details.length > 0
@@ -590,13 +602,13 @@ export default function ProductsPage() {
                     <div class="label-name">${p.name || ""}</div>
                     ${detailsHtml}
                     <div class="label-barcode-container">
-                        <svg class="barcode-svg" 
-                             data-value="${p.barcode}" 
-                             data-bar-width="1.1" 
-                             data-bar-height="28" 
-                             data-font-size="0" 
-                             data-text-margin="0" 
-                             data-svg-margin="0" 
+                        <svg class="barcode-svg"
+                             data-value="${p.barcode}"
+                             data-bar-width="1.1"
+                             data-bar-height="28"
+                             data-font-size="0"
+                             data-text-margin="0"
+                             data-svg-margin="0"
                              data-display-value="false">
                         </svg>
                     </div>
@@ -647,6 +659,7 @@ export default function ProductsPage() {
         barcode_image_base64: string;
         battery_health?: string;
         series_region?: string;
+        // Narxlar bu endpointdan kelmasligi mumkin, shuning uchun product'dan olamiz
       }>(
         `${API_URL_PRODUCT_OPERATIONS}${product.id}/print-label-data/`,
         {
@@ -664,22 +677,26 @@ export default function ProductsPage() {
       }
 
       const detailsArray: string[] = [];
-      if (product.storage_capacity)
-        detailsArray.push(`Xotira: ${product.storage_capacity}`);
-
       const productType = determineProductTypeForDisplay(product);
+
       if (productType === "iPhone") {
+        if (product.storage_capacity) detailsArray.push(`Xotira: ${product.storage_capacity}`);
         if (printData.battery_health || product.battery_health)
           detailsArray.push(`Batareya: ${printData.battery_health || product.battery_health}%`);
         if (printData.series_region || product.series_region)
           detailsArray.push(`Region: ${printData.series_region || product.series_region}`);
+      } else if (productType === "Android") {
+         if (product.storage_capacity) detailsArray.push(`Xotira: ${product.storage_capacity}`);
+         // Android uchun boshqa kerakli ma'lumotlar
+      } else if (productType === "Aksesuar") {
+        // --- O'ZGARTIRILDI: Aksessuar uchun izoh o'rniga narx ---
+        const priceString = formatCombinedPrice(product.price_usd, product.price_uzs, true);
+        if (priceString && priceString !== "-") {
+            detailsArray.push(priceString);
+        }
+        // --- ---
       }
-      if (productType === "Aksesuar" && product.description)
-        detailsArray.push(
-          `${product.description.substring(0, 25)}${
-            product.description.length > 25 ? "..." : ""
-          }`
-        );
+
 
       const detailsHtml =
         detailsArray.length > 0
@@ -1110,7 +1127,7 @@ export default function ProductsPage() {
               <ShadDialogTitle>Ommaviy Chop Etish (Yorliqlar 50x30mm)</ShadDialogTitle>
               <ShadDialogDescription>
                 Chop etish uchun mahsulotlarni tanlang. Faqat shtrix-kodi mavjud mahsulotlar ko'rsatiladi.
-                (Narx va shtrix raqami yorliqda ko'rsatilmaydi)
+                {/* O'zgartirilgan izoh: (Narx yorliqda ko'rsatilishi mumkin) */}
               </ShadDialogDescription>
             </ShadDialogHeader>
             <div className="my-4 flex items-center space-x-2">
@@ -1150,11 +1167,14 @@ export default function ProductsPage() {
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-sm truncate" title={p.name}>{p.name}</div>
                           <div className="text-xs text-muted-foreground truncate">
-                            {p.storage_capacity && `Xot: ${p.storage_capacity}`}
-                            {determineProductTypeForDisplay(p) === "iPhone" &&
-                              p.battery_health &&
-                              ` | Bat: ${p.battery_health}%`}
-                              {p.barcode && ` | Kod: ${p.barcode.length > 15 ? p.barcode.substring(0,12) + "..." : p.barcode }`}
+                            {determineProductTypeForDisplay(p) === "Aksesuar"
+                              ? (formatCombinedPrice(p.price_usd, p.price_uzs, true) !== "-" ? formatCombinedPrice(p.price_usd, p.price_uzs, true) : "")
+                              : (
+                                (p.storage_capacity ? `Xot: ${p.storage_capacity}`: "") +
+                                (determineProductTypeForDisplay(p) === "iPhone" && p.battery_health ? ` | Bat: ${p.battery_health}%` : "")
+                              )
+                            }
+                            {p.barcode && ` | Kod: ${p.barcode.length > 15 ? p.barcode.substring(0,12) + "..." : p.barcode }`}
                           </div>
                         </div>
                         <div className="w-32 h-12 flex items-center justify-center border rounded-sm bg-white p-0.5 ml-2 shrink-0">
