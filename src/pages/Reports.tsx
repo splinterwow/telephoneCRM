@@ -35,7 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const API_URL_INVENTORY_HISTORY = "http://nuriddin777.uz/api/inventory/history/";
+const API_URL_INVENTORY_HISTORY = "https://smartphone777.pythonanywhere.com/api/inventory/history/";
 
 // Sana formatlash funksiyasi
 const formatDate = (isoString) => {

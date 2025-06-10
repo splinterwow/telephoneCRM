@@ -19,11 +19,11 @@ import {
 } from "lucide-react";
 
 const API_URL_DASHBOARD =
-  "http://nuriddin777.uz/api/reports/dashboard/";
+  "https://smartphone777.pythonanywhere.com/api/reports/dashboard/";
 const API_URL_SALES_DETAILS =
-  "http://nuriddin777.uz/api/reports/sales/";
+  "https://smartphone777.pythonanywhere.com/api/reports/sales/";
 const API_URL_SALES_CHART =
-  "http://nuriddin777.uz/api/reports/sales-chart/";
+  "https://smartphone777.pythonanywhere.com/api/reports/sales-chart/";
 
 export default function Dashboard() {
   const { currentStore } = useApp();

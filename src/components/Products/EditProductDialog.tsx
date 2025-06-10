@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { Loader2, User, Phone } from "lucide-react";
 
-const API_URL_PRODUCTS = "http://nuriddin777.uz/api/products/";
+const API_URL_PRODUCTS = "https://smartphone777.pythonanywhere.com/api/products/";
 
 interface Product {
   id: number;

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, Plus, Pencil, Trash2, AlertCircle, UserCheck, UserX, Search } from "lucide-react";
 import { toast } from "sonner";
 
-const API_BASE_URL = "http://nuriddin777.uz/api/auth/";
+const API_BASE_URL = "https://smartphone777.pythonanywhere.com/api/auth/";
 const API_USERS_URL = `${API_BASE_URL}users/`;
 const API_ROLES_URL = `${API_BASE_URL}roles/`;
 // const API_PROFILES_URL = `${API_BASE_URL}profiles/`; // BU ENDI KERAKMAS

@@ -152,7 +152,7 @@ const ProductCard = ({ product, disabled, onCardClick }: {
 
 
 // --- API URL manzillari ---
-const API_BASE_URL = "http://nuriddin777.uz/api";
+const API_BASE_URL = "https://smartphone777.pythonanywhere.com/api";
 const API_POS_PRODUCTS_URL = (kassaId: number, searchTerm?: string, pageUrl?: string) => {
   if (pageUrl) return pageUrl;
   let url = `${API_BASE_URL}/pos/products/?kassa_id=${kassaId}`;

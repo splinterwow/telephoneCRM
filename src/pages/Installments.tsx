@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const INSTALLMENTS_API_URL = "http://nuriddin777.uz/api/installments/";
-const SALES_API_URL = "http://nuriddin777.uz/api/sales/sales/";
+const INSTALLMENTS_API_URL = "https://smartphone777.pythonanywhere.com/api/installments/";
+const SALES_API_URL = "https://smartphone777.pythonanywhere.com/api/sales/sales/";
 
 interface Customer {
   id?: number;

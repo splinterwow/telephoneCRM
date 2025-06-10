@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 
-const SALES_API_URL = "http://nuriddin777.uz/api/sales/";
+const SALES_API_URL = "https://smartphone777.pythonanywhere.com/api/sales/";
 
 interface SoldItemDetail {
   id?: number;

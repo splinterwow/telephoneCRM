@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import axios from "axios";
-import { Loader2, ScanBarcode, Fingerprint, User, Phone } from "lucide-react"; // Yangi ikonlar
+import { Loader2, ScanBarcode, Fingerprint, User, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ApiCategory {
@@ -33,7 +33,7 @@ export type DialogView = "phone" | "accessory";
 type PhoneSubType = "android" | "iphone";
 type IdentifierModeApi = "auto_barcode" | "manual_barcode_unique" | "manual_imei";
 
-interface Product { // ProductsPage.tsx dagi bilan bir xil bo'lishi kerak
+interface Product {
   id: number;
   name: string;
   category: number | null;
@@ -50,9 +50,8 @@ interface Product { // ProductsPage.tsx dagi bilan bir xil bo'lishi kerak
   purchase_date?: string | null;
   is_active: boolean;
   description?: string | null;
-  // Backend Product modeliga mijoz ma'lumotlari qo'shilsa, bu yerga ham qo'shiladi
-  // customer_full_name?: string | null;
-  // customer_phone_number?: string | null;
+  customer_full_name?: string | null; // Backend Product modeliga mijoz ma'lumotlari qo'shilsa
+  customer_phone_number?: string | null; // Backend Product modeliga mijoz ma'lumotlari qo'shilsa
 }
 
 interface FormData {
@@ -75,10 +74,8 @@ interface FormData {
   accessoryPriceUzs: string;
   accessoryPriceUsd: string;
   accessoryDescription: string;
-  // --- YANGI MAYDONLAR ---
   customerFullName: string;
   customerPhoneNumber: string;
-  // --- ---
 }
 
 const initialFormData: FormData = {
@@ -101,10 +98,8 @@ const initialFormData: FormData = {
   accessoryPriceUzs: "",
   accessoryPriceUsd: "",
   accessoryDescription: "",
-  // --- YANGI MAYDONLAR UCHUN BOSHLANG'ICH QIYMATLAR ---
   customerFullName: "",
   customerPhoneNumber: "",
-  // --- ---
 };
 
 interface AddProductDialogProps {
@@ -115,13 +110,13 @@ interface AddProductDialogProps {
 }
 
 const API_URL_CATEGORIES =
-  "http://nuriddin777.uz/api/categories/";
+  "https://smartphone777.pythonanywhere.com/api/categories/";
 const API_URL_PRODUCTS =
-  "http://nuriddin777.uz/api/products/";
+  "https://smartphone777.pythonanywhere.com/api/products/";
 const API_URL_GENERATE_BARCODE =
-  "http://nuriddin777.uz/api/products/generate-barcode/";
+  "https://smartphone777.pythonanywhere.com/api/products/generate-barcode/";
 const API_URL_KASSA =
-  "http://nuriddin777.uz/api/kassa/";
+  "https://smartphone777.pythonanywhere.com/api/kassa/";
 
 export function AddProductDialog({
   open,
@@ -146,9 +141,7 @@ export function AddProductDialog({
 
   const findCategoryIdFromApi = useCallback(
     (targetCategoryName: string, categories: ApiCategory[]): string => {
-      // console.log("findCategoryIdFromApi: Attempting to find category for:", targetCategoryName, "Available categories:", categories);
       if (categories.length === 0 || !targetCategoryName) {
-        // console.warn("findCategoryIdFromApi: No categories available or targetCategoryName is empty.");
         return "";
       }
       const targetLower = targetCategoryName.toLowerCase().trim();
@@ -159,11 +152,6 @@ export function AddProductDialog({
         if ((targetLower.includes("accessory") || targetLower.includes("aksesuar")) && (catNameLower.includes("accessory") || catNameLower.includes("aksesuar"))) return true;
         return catNameLower === targetLower;
       });
-      // if (category) {
-      //   console.log("findCategoryIdFromApi: Found category:", category);
-      // } else {
-      //   console.warn("findCategoryIdFromApi: Category not found for target:", targetCategoryName);
-      // }
       return category ? category.id.toString() : "";
     },
     []
@@ -171,9 +159,8 @@ export function AddProductDialog({
 
   useEffect(() => {
     if (open) {
-      // console.log("AddProductDialog opened. Initial view:", initialView);
       setFormData({
-        ...initialFormData, // Bu yerda customerFullName va customerPhoneNumber ham tozalanishi kerak
+        ...initialFormData,
         purchaseDate: new Date().toISOString().split("T")[0],
         identifierType: initialView === "accessory" ? "auto_barcode" : "auto_barcode",
       });
@@ -191,20 +178,17 @@ export function AddProductDialog({
       const token = localStorage.getItem("accessToken");
       if (!token) {
         toast.error("Avtorizatsiya tokeni topilmadi. Iltimos, qayta tizimga kiring.");
-        // console.error("AddProductDialog: Auth token not found in fetchData. Aborting data load.");
         setIsLoadingCategories(false);
         setIsLoadingKassa(false);
         onOpenChange(false);
         return;
       }
       try {
-        // console.log("AddProductDialog: Fetching categories and kassa list...");
         const [categoriesResponse, kassaResponse] = await Promise.all([
           axios.get(API_URL_CATEGORIES, { headers: { Authorization: `Bearer ${token}` } }),
           axios.get(API_URL_KASSA, { headers: { Authorization: `Bearer ${token}` } })
         ]);
 
-        // console.log("AddProductDialog: Categories API Response raw data:", categoriesResponse.data);
         const categoriesData = Array.isArray(categoriesResponse.data)
           ? categoriesResponse.data
           : (categoriesResponse.data as any).results || [];
@@ -212,7 +196,6 @@ export function AddProductDialog({
           categoriesData.filter((cat: any) => cat.name && cat.id) as ApiCategory[]
         );
         
-        // console.log("AddProductDialog: Kassa API Response raw data:", kassaResponse.data);
         const kassaData = Array.isArray(kassaResponse.data)
           ? kassaResponse.data
           : (kassaResponse.data as any).results || [];
@@ -220,11 +203,9 @@ export function AddProductDialog({
         setKassaList(filteredKassa);
 
       } catch (error: any) {
-        // console.error("AddProductDialog: Error fetching categories or kassa:", error);
         let errorMessage = "Kategoriya yoki kassalarni yuklashda xatolik: ";
         if (error.response) {
           errorMessage += `Server javobi: ${error.response.status}. Tafsilotlar konsolda.`;
-          // console.error("Server Response Data:", error.response.data);
         } else if (error.request) {
           errorMessage += "Serverdan javob kelmadi. Internet aloqasini tekshiring.";
         } else {
@@ -253,35 +234,28 @@ export function AddProductDialog({
         ? (selectedPhoneSubType === 'iphone' || nameLower.includes("iphone") ? "iPhone" : "Android")
         : "Accessory";
     
-    // console.log("handleGenerateBarcode: Attempting to find category for barcode generation:", targetCatName);
     categoryIdForBarcode = findCategoryIdFromApi(targetCatName, apiCategories);
-    // ... (qolgan qismi o'zgarishsiz)
 
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) {
         toast.error("Avtorizatsiya tokeni yo'q. Generatsiya qilib bo'lmadi.");
-        // console.error("handleGenerateBarcode: Auth token not found.");
         setIsGeneratingBarcode(false);
         return;
       }
       const params: any = {};
       if (categoryIdForBarcode) params.category_id = categoryIdForBarcode;
       
-      // console.log("handleGenerateBarcode: Generating barcode with params:", params);
       const response = await axios.get<{ barcode: string }>(
         API_URL_GENERATE_BARCODE,
         { headers: { Authorization: `Bearer ${token}` }, params }
       );
       setGeneratedBarcodeForDisplay(response.data.barcode);
-      // console.log("handleGenerateBarcode: Generated barcode:", response.data.barcode);
       toast.success("Yangi shtrix-kod generatsiya qilindi!");
     } catch (error: any) {
-      // console.error("handleGenerateBarcode: Error generating barcode:", error);
       let errorMessage = "Shtrix-kod generatsiya qilishda xatolik: ";
        if (error.response) {
           errorMessage += `Server javobi: ${error.response.status}. Tafsilotlar konsolda.`;
-          // console.error("Server Response Data (Barcode Gen):", error.response.data);
         } else if (error.request) {
           errorMessage += "Serverdan javob kelmadi.";
         } else {
@@ -296,12 +270,9 @@ export function AddProductDialog({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // console.log("handleSubmit: Form submission started. Current state:", {formData, manualImei, generatedBarcodeForDisplay, selectedPhoneSubType, initialView});
 
-    // --- Validatsiya (avvalgi qismi o'zgarishsiz) ---
     if (!formData.name.trim()) {
       toast.error("Mahsulot nomi kiritilishi shart.");
-      // console.error("handleSubmit: Validation failed - Product name is empty.");
       return;
     }
     if (
@@ -311,10 +282,9 @@ export function AddProductDialog({
     ) {
       const id_type_label = formData.identifierType === "manual_imei" ? "IMEI" : "Shtrix Kod (Unikal)";
       toast.error(`${id_type_label} kiritilishi shart.`);
-      // console.error(`handleSubmit: Validation failed - ${id_type_label} is empty for manual input.`);
       return;
     }
-    // --- Kategoriya va miqdor validatsiyasi (avvalgi qismi o'zgarishsiz) ---
+    
     const nameLower = formData.name.toLowerCase().trim();
     let targetCatNameSubmit = initialView === "phone"
         ? (selectedPhoneSubType === 'iphone' || nameLower.includes("iphone") ? "iPhone" : "Android")
@@ -324,14 +294,12 @@ export function AddProductDialog({
 
     if (!finalCategoryId) {
         toast.error(`"${targetCatNameSubmit}" uchun mos kategoriya tizimda mavjud emas. Iltimos, avval "Kategoriya qo'shish" orqali kerakli kategoriyani yarating yoki mahsulot nomini to'g'rilang. Mahsulot saqlanmadi.`);
-        // console.error(`handleSubmit: Validation failed - Category ID not found for "${targetCatNameSubmit}". Submission halted.`);
         setIsSubmitting(false); 
         return;
     }
     
     let finalStockQuantityForPayload = 0;
     const stockQtyStr = formData.initialStockQuantity.trim();
-    // ... (miqdor validatsiyasi qolgan qismi o'zgarishsiz) ...
      if (initialView === "phone") {
       if (!stockQtyStr) {
         toast.error("Telefon uchun boshlang'ich miqdor kiritilishi shart.");
@@ -364,14 +332,10 @@ export function AddProductDialog({
       purchase_date: formData.purchaseDate || null,
       is_active: true,
       add_to_stock_quantity: finalStockQuantityForPayload,
-      // --- YANGI MA'LUMOTLARNI PAYLOADGA QO'SHISH ---
-      // Backendda qanday nomda qabul qilinishiga qarab o'zgartiring
       customer_full_name: formData.customerFullName.trim() || null,
       customer_phone_number: formData.customerPhoneNumber.trim() || null,
-      // --- ---
     };
     
-    // ... (qolgan payload tuzish va narx validatsiyasi o'zgarishsiz) ...
     if (initialView === "accessory") {
       productPayload.product_is_accessory_type = true; 
     }
@@ -401,7 +365,6 @@ export function AddProductDialog({
           hasSellingPrice = true;
       } else {
           toast.error("Sotiladigan narx (so'm) noto'g'ri formatda yoki 0 dan kichik/teng.");
-          // console.error("handleSubmit: Validation failed - Selling price UZS is invalid. Value:", p_uzs_str);
           setIsSubmitting(false); return;
       }
     }
@@ -412,7 +375,6 @@ export function AddProductDialog({
           hasSellingPrice = true;
       } else {
           toast.error("Sotiladigan narx (USD) noto'g'ri formatda yoki 0 dan kichik/teng.");
-          // console.error("handleSubmit: Validation failed - Selling price USD is invalid. Value:", p_usd_str);
           setIsSubmitting(false); return;
       }
     }
@@ -421,7 +383,6 @@ export function AddProductDialog({
       toast.error(
         "Kamida bitta sotish narxi (UZS yoki USD) 0 dan katta bo'lishi shart."
       );
-      // console.error("handleSubmit: Validation failed - No selling price provided (UZS or USD > 0).");
       setIsSubmitting(false);
       return;
     }
@@ -436,19 +397,11 @@ export function AddProductDialog({
       if (purch_uzs_str.trim() !== "") {
         if (!isNaN(purch_uzs) && purch_uzs > 0)
           productPayload.purchase_price_uzs = purch_uzs.toFixed(0);
-        else {
-            // toast.warn("Olingan narx (so'm) noto'g'ri formatda yoki 0 dan kichik/teng, kiritilmadi.");
-            // console.warn("handleSubmit: Purchase price UZS is invalid, not included. Value:", purch_uzs_str);
-        }
       }
 
       if (purch_usd_str.trim() !== "") {
         if (!isNaN(purch_usd) && purch_usd > 0)
           productPayload.purchase_price_usd = purch_usd.toFixed(2);
-        else {
-            // toast.warn("Olingan narx (USD) noto'g'ri formatda yoki 0 dan kichik/teng, kiritilmadi.");
-            // console.warn("handleSubmit: Purchase price USD is invalid, not included. Value:", purch_usd_str);
-        }
       }
     }
 
@@ -460,13 +413,11 @@ export function AddProductDialog({
       } else { 
         if (!formData.iphoneColor.trim()) {
           toast.error("iPhone uchun rang kiritilishi shart.");
-          // console.error("handleSubmit: Validation failed - iPhone color is empty.");
           setIsSubmitting(false);
           return;
         }
         if (!formData.iphoneCapacityStorage.trim()) {
           toast.error("iPhone uchun sig‘im kiritilishi shart.");
-          // console.error("handleSubmit: Validation failed - iPhone capacity is empty.");
           setIsSubmitting(false);
           return;
         }
@@ -478,10 +429,6 @@ export function AddProductDialog({
             const batteryHealth = parseFloat(batteryHealthVal);
             if (!isNaN(batteryHealth) && batteryHealth > 0 && batteryHealth <=100)
               productPayload.battery_health = Number(batteryHealth); 
-            else {
-              //  toast.warn("iPhone batareya quvvati noto'g'ri formatda (0-100 oralig'ida bo'lishi kerak), kiritilmadi.");
-              //  console.warn("handleSubmit: iPhone battery health is invalid, not included. Value:", batteryHealthVal);
-            }
         }
 
         if (formData.iphoneSeriesRegion.trim())
@@ -494,29 +441,26 @@ export function AddProductDialog({
         productPayload.description = formData.accessoryDescription.trim();
     }
 
-    // console.log("handleSubmit: Final productPayload to be sent to API:", productPayload);
+    // TEKSHIRISH UCHUN: Yuborilayotgan ma'lumotlarni konsolga chiqaramiz
+    console.log("Mahsulot qo'shish uchun APIga yuborilayotgan ma'lumotlar (payload):", productPayload);
 
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) {
         toast.error("Avtorizatsiya tokeni topilmadi. Saqlash amalga oshirilmadi.");
-        // console.error("handleSubmit: Auth token not found before API call.");
         setIsSubmitting(false);
         return;
       }
       const response = await axios.post(API_URL_PRODUCTS, productPayload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // console.log("handleSubmit: API success response:", response);
       toast.success(`Mahsulot "${response.data.name}" muvaffaqiyatli qo‘shildi!`);
-      onAddProduct(response.data as Product);
+      onAddProduct(response.data as Product); // Bu yerda kelgan productda customer_full_name bo'lishi kerak
       handleDialogClose();
     } catch (error: any) {
-      // console.error("handleSubmit: API submission error:", error);
       let errMsg = `Mahsulot qo‘shishda xatolik: `;
       if (error.response && error.response.data) {
         const data = error.response.data;
-        // console.error("handleSubmit: Server error response data:", data);
         if (typeof data === "object" && data !== null) {
           if (data.detail) { 
              errMsg += `${data.detail}. `;
@@ -566,10 +510,8 @@ export function AddProductDialog({
             const nameLower = value.toLowerCase().trim();
             if (nameLower.includes("iphone") && selectedPhoneSubType !== "iphone") {
                 setSelectedPhoneSubType("iphone");
-                //  console.log("handleChange: Auto-switched to iPhone subtype based on name.");
             } else if (!nameLower.includes("iphone") && selectedPhoneSubType === "iphone" && !nameLower.includes("android")) {
                  setSelectedPhoneSubType("android");
-                //  console.log("handleChange: Auto-switched to Android subtype as 'iphone' removed from name.");
             }
         }
         return newState;
@@ -578,7 +520,6 @@ export function AddProductDialog({
 
   const handlePhoneSubTypeChange = (subType: PhoneSubType) => {
     setSelectedPhoneSubType(subType);
-    // console.log("handlePhoneSubTypeChange: Phone subtype changed to:", subType);
   };
 
   const handleIdentifierModeChange = (mode: IdentifierModeApi) => {
@@ -587,11 +528,9 @@ export function AddProductDialog({
     if (mode === "manual_imei" || mode === "manual_barcode_unique") {
         setManualImei("");
     }
-    // console.log("handleIdentifierModeChange: Identifier mode changed to:", mode);
   };
 
   const renderPhoneSubTypeSelector = () => (
-    // ... (o'zgarishsiz) ...
      <div className="flex border-b mb-4">
       <Button
         variant="ghost"
@@ -626,7 +565,6 @@ export function AddProductDialog({
 
   const renderIdentifierSelector = () =>
     initialView !== "phone" ? null : (
-    // ... (o'zgarishsiz) ...
     <div className="mb-3">
         <Label className="text-xs font-medium mb-1 block">Identifikator Turi</Label>
         <div className="flex rounded-md border bg-muted p-0.5">
@@ -686,7 +624,6 @@ export function AddProductDialog({
         />
       </div>
       
-      {/* --- MIJOZ MA'LUMOTLARI UCHUN YANGI MAYDONLAR --- */}
       <div className="pt-2 mt-2 border-t">
          <h3 className="text-sm font-semibold mb-2 text-muted-foreground">
           Mijoz Ma'lumotlari (Kirim uchun)
@@ -729,11 +666,9 @@ export function AddProductDialog({
             </div>
         </div>
       </div>
-      {/* --- --- */}
 
 
       {initialView === "phone" && (formData.identifierType === "manual_imei" || formData.identifierType === "manual_barcode_unique") && (
-        // ... (o'zgarishsiz) ...
         <div className="space-y-1">
           <Label htmlFor="manualImei" className="text-xs font-medium">
             {formData.identifierType === "manual_imei" ? "IMEI" : "Shtrix Kod (Unikal)"} <span className="text-destructive">*</span>
@@ -750,7 +685,7 @@ export function AddProductDialog({
           />
           <p className="text-xs text-muted-foreground">
             {formData.identifierType === "manual_imei"
-              ? "Bir nechta IMEI ni vergul (,) bilan ajratib kiriting (agar backend bir nechta IMEI ni bitta mahsulot uchun qo'llab-quvvatlasa)."
+              ? "Bir nechta IMEI ni vergul (,) bilan ajratib kiriting."
               : "Bu shtrix kod tizimda yagona bo'lishi kerak."
             }
           </p>
@@ -758,7 +693,6 @@ export function AddProductDialog({
       )}
 
       {( (initialView === "phone" && formData.identifierType === "auto_barcode") || initialView === "accessory" ) && (
-        // ... (o'zgarishsiz) ...
          <div className="space-y-1">
           <Label className="text-xs font-medium">Shtrix Kod</Label>
           <div className="flex items-center gap-2">
@@ -885,9 +819,8 @@ export function AddProductDialog({
         {initialView === "phone" && renderPhoneSubTypeSelector()}
         <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-3">
           {initialView === "phone" && renderIdentifierSelector()}
-          {renderCommonFields()} {/* Mijoz ma'lumotlari shu yerda render bo'ladi */}
+          {renderCommonFields()}
           {initialView === "phone" && (
-            // ... (telefon uchun narxlar va qo'shimcha ma'lumotlar qismi o'zgarishsiz) ...
             <>
               <div className="pt-2 mt-2 border-t">
                 <h3 className="text-sm font-semibold mb-2 text-muted-foreground">
@@ -1055,7 +988,6 @@ export function AddProductDialog({
             </>
           )}
           {initialView === "accessory" && (
-            // ... (aksesuar uchun narxlar va qo'shimcha ma'lumotlar qismi o'zgarishsiz) ...
             <div className="pt-2 mt-2 border-t space-y-3">
               <h3 className="text-sm font-semibold mb-1 text-muted-foreground">
                 Qo'shimcha Ma'lumotlar (Aksesuar)
@@ -1157,4 +1089,3 @@ export function AddProductDialog({
     </Dialog>
   );
 }
-

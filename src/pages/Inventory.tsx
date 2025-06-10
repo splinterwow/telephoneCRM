@@ -9,11 +9,11 @@ import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
-const INVENTORY_API_URL = "http://nuriddin777.uz/api/inventory/";
-const INVENTORY_ADD_URL = "http://nuriddin777.uz/api/inventory/add/";
-const INVENTORY_REMOVE_URL = "http://nuriddin777.uz/api/inventory/remove/";
-const PRODUCTS_API_URL = "http://nuriddin777.uz/api/products/";
-const KASSA_API_URL = "http://nuriddin777.uz/api/kassa/";
+const INVENTORY_API_URL = "https://smartphone777.pythonanywhere.com/api/inventory/";
+const INVENTORY_ADD_URL = "https://smartphone777.pythonanywhere.com/api/inventory/add/";
+const INVENTORY_REMOVE_URL = "https://smartphone777.pythonanywhere.com/api/inventory/remove/";
+const PRODUCTS_API_URL = "https://smartphone777.pythonanywhere.com/api/products/";
+const KASSA_API_URL = "https://smartphone777.pythonanywhere.com/api/kassa/";
 
 // Inventory interfeysi
 interface InventoryItem {

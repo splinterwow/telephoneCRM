@@ -24,7 +24,7 @@ export function AppHeader() {
     try {
       const token = localStorage.getItem("accessToken");
       const response = await axios.patch(
-        "http://nuriddin777.uz/api/settings/currency/",
+        "https://smartphone777.pythonanywhere.com/api/settings/currency/",
         { rate: Number(newCurrencyRate) },
         {
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

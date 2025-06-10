@@ -1,6 +1,6 @@
 // src/pages/Login.tsx
 import { useState, useEffect } from "react";
-import { Navigate, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useApp } from "@/context/AppContext"; // currentUser ni olish uchun
 import { ThemeToggle } from "@/components/ThemeToggle"; // Dark mode toggle
 import { Input } from "@/components/ui/input"; // UI input component
@@ -19,7 +19,7 @@ export default function Login() {
 
   useEffect(() => {
     if (isAuthenticated && currentUser) {
-      const from = location.state?.from?.pathname || "/";
+      // const from = location.state?.from?.pathname || "/"; // Bu qator hozircha ishlatilmayapti
       const role = currentUser.role;
 
       if (location.pathname === "/login") {
@@ -28,19 +28,22 @@ export default function Login() {
         } else if (role === "admin") {
           navigate("/admin", { replace: true });
         } else {
+          // Agar boshqa rollar bo'lsa yoki umumiy foydalanuvchi bo'lsa
+          // Qayerga yo'naltirish kerakligini aniqlashtiring.
+          // Misol uchun, agar oddiy foydalanuvchilar uchun alohida sahifa bo'lmasa, '/' ga yo'naltirish mumkin.
           navigate("/", { replace: true });
         }
       }
     }
   }, [isAuthenticated, currentUser, navigate, location]);
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => { // FormEvent tipini qo'shdim
     e.preventDefault();
     setIsLoading(true);
 
     try {
       const response = await axios.post(
-        "http://nuriddin777.uz/api/auth/login/",
+        "https://smartphone777.pythonanywhere.com/api/auth/login/",
         {
           username,
           password,
@@ -50,7 +53,17 @@ export default function Login() {
       const { access, refresh, user } = response.data;
 
       await login({ accessToken: access, refresh: refresh, user: user });
-    } catch (error) {
+      
+      // Muvaffaqiyatli kirishdan keyin toast ko'rsatish mumkin
+      // toast.success("Muvaffaqiyatli kirildi!");
+
+      // useEffect dagi navigatsiya logikasi o'zi ishlaydi,
+      // lekin agar darhol yo'naltirish kerak bo'lsa, bu yerda ham qilsa bo'ladi,
+      // ammo useEffect dagi bilan konflikt bo'lmasligi uchun ehtiyot bo'ling.
+      // Misol uchun, user.role ga qarab shu yerda navigate() qilish.
+      // Agar useEffect ga ishonsak, bu yerda qo'shimcha navigatsiya shart emas.
+
+    } catch (error: any) { // error tipini any qilib belgiladim, yaxshiroq tip berish mumkin
       const errorMessage =
         error.response?.data?.detail ||
         error.response?.data?.message ||
@@ -59,16 +72,33 @@ export default function Login() {
 
       toast.error(errorMessage);
       console.error("Login error:", error.response?.data || error.message || error);
-      logout();
+      // logout() ni bu yerda chaqirish shart emas, chunki login muvaffaqiyatsiz bo'ldi,
+      // AppContext dagi holat o'zgarmagan bo'lishi kerak.
+      // Agar login() funksiyasi ichida qandaydir state ni o'zgartirib,
+      // keyin xatolik yuz bersa, o'shanda tozalash uchun kerak bo'lishi mumkin.
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fillStoreDemo = () => {
-    setUsername("assalom");
-    setPassword("password");
-  };
+  // fillStoreDemo funksiyasi mavjud emas, agar test uchun kerak bo'lsa,
+  // uni qoldirishingiz yoki olib tashlashingiz mumkin.
+  // const fillStoreDemo = () => {
+  //   setUsername("assalom");
+  //   setPassword("password");
+  // };
+
+  // Agar foydalanuvchi allaqachon kirgan bo'lsa va /login sahifasiga to'g'ridan-to'g'ri kirmoqchi bo'lsa,
+  // uni darhol kerakli sahifaga yo'naltirish uchun useEffect dan tashqari
+  // komponent render bo'lishidan oldin tekshiruv qo'shish mumkin,
+  // lekin useEffect hozirgi holatda buni qoplaydi.
+  // Agar siz `isAuthenticated` va `currentUser` mavjud bo'lganda login sahifasini umuman ko'rsatmaslikni istasangiz:
+  // if (isAuthenticated && currentUser) {
+  //    // Bu yerda navigate qilish o'rniga, useEffect kutadi.
+  //    // Yoki bu yerda null yoki biror "Yuklanmoqda..." komponentini qaytarishingiz mumkin.
+  //    // Misol: return <Navigate to="/" replace />; (lekin bu useEffect bilan ziddiyatga olib kelishi mumkin)
+  // }
+
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-pos-background to-background">
@@ -123,11 +153,16 @@ export default function Login() {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full pos-button"
+              className="w-full pos-button" // Agar 'pos-button' maxsus stil bo'lsa, uni tekshiring
             >
               {isLoading ? "Yuklanmoqda..." : "Kirish"}
             </Button>
           </form>
+          {/* Test uchun demo ma'lumotlarni to'ldirish tugmasi
+           <Button onClick={fillStoreDemo} variant="outline" className="w-full mt-2">
+            Demo ma'lumotlar
+          </Button>
+          */}
         </div>
       </div>
     </div>
