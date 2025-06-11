@@ -81,6 +81,49 @@ const getOperationVisuals = (quantity) => {
   };
 };
 
+// --- O'ZGARTIRILGAN FUNKSIYA: Izohni formatlash ---
+const formatDisplayComment = (operationTypeDisplay, apiComment, productName) => {
+  const opTypeExact = operationTypeDisplay || ""; // Operatsiya turi (API dan kelgan nomi)
+  
+  // Asosiy kontent: agar foydalanuvchi izohi (apiComment) mavjud bo'lsa va bo'sh joylardan iborat bo'lmasa, uni ishlatamiz.
+  // Aks holda, mahsulot nomini ishlatamiz.
+  const userComment = apiComment?.trim() ? apiComment.trim() : null;
+  const mainContent = userComment || (productName || "Noma'lum mahsulot");
+
+  let finalPrefix = "";
+
+  // Backenddan keladigan `operationTypeDisplay` qiymatlariga qarab prefikslarni aniqlaymiz
+  // BU YERNI O'ZINGIZNING BACKEND QIYMATLARINGIZGA MOSLAB TO'LDIRING!
+  if (opTypeExact === "") {
+    finalPrefix = "B. qoldiq:";
+  } else if (opTypeExact === "Kirim") {
+    finalPrefix = "Kirim:";
+  } else if (opTypeExact === "Sotuv") {
+    finalPrefix = "Sotilgan:";
+  } else if (opTypeExact === "Hisobdan chiqarish") {
+    finalPrefix = "Chiqarildi:"; // Yoki "Hisobdan chiqarildi:"
+  } else if (opTypeExact === "Mahsulot qaytarib olindi (dostavchikdan)") { // Masalan, sotib olingan tovarni qaytarish (kirim)
+    finalPrefix = "Qaytarib olindi:";
+  } else if (opTypeExact === "Mahsulot qaytarildi (xaridorga)") { // Masalan, xaridor tovarni do'konga qaytarishi (kirim)
+    finalPrefix = "Xaridor qaytardi:";
+  }
+  // ... Boshqa operatsiya turlarini va ularga mos prefikslarni shu yerga qo'shing
+
+  if (finalPrefix) {
+    return `${finalPrefix} ${mainContent}`;
+  } else {
+    // Agar operatsiya turi uchun maxsus prefiks belgilanmagan bo'lsa:
+    if (userComment) {
+      return userComment; // Agar foydalanuvchi izohi bo'lsa, o'shani ko'rsatamiz
+    } else if (opTypeExact) {
+      // Agar foydalanuvchi izohi yo'q, lekin operatsiya turi mavjud bo'lsa
+      return `${opTypeExact}: ${mainContent}`; // Standart format: "Operatsiya Turi: Mahsulot Nomi"
+    }
+    return "-"; // Eng oxirgi chora, agar hech narsa yo'q bo'lsa
+  }
+};
+// --- /O'ZGARTIRILGAN FUNKSIYA ---
+
 export default function InventoryHistoryPage() {
   const [historyData, setHistoryData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -100,7 +143,6 @@ export default function InventoryHistoryPage() {
       const token = localStorage.getItem("accessToken");
       if (!token) {
         setError("Avtorizatsiya qilinmagan. Iltimos, tizimga kiring.");
-        // TODO: Foydalanuvchini login sahifasiga yo'naltirish (masalan, useNavigate bilan)
         setIsLoading(false);
         return;
       }
@@ -114,7 +156,6 @@ export default function InventoryHistoryPage() {
       console.error("Inventar harakatlari API xatosi:", err);
       if (err.response?.status === 401) {
         setError("Sessiya muddati tugagan. Iltimos, tizimga qayta kiring.");
-        // TODO: Login sahifasiga yo'naltirish
       } else if (err.code === "ECONNABORTED" || err.message.includes("timeout")) {
         setError("Serverga ulanishda vaqt tugadi. Internet aloqasini tekshiring yoki keyinroq urinib ko'ring.");
       } else {
@@ -131,14 +172,14 @@ export default function InventoryHistoryPage() {
   useEffect(() => {
     const handler = setTimeout(() => {
       fetchInventoryHistory(currentPage, searchTerm);
-    }, 500); // Debounce uchun 500ms kutish
+    }, 500); 
 
     return () => clearTimeout(handler);
   }, [currentPage, searchTerm, fetchInventoryHistory]);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
-    setCurrentPage(1); // Qidiruv o'zgarganda birinchi sahifaga qaytish
+    setCurrentPage(1); 
   };
 
   const handlePageChange = (direction) => {
@@ -152,8 +193,8 @@ export default function InventoryHistoryPage() {
   };
 
   const itemsPerPage = useMemo(() => {
-    // API javobidan `page_size` ni olishga harakat qilish mumkin
-    // Hozircha `results` uzunligiga qarab yoki default qiymat
+    // Ideal holda, API page_size ni qaytarishi kerak.
+    // Hozircha results.length yoki default qiymat.
     return historyData?.results?.length || 10; 
   }, [historyData]);
 
@@ -166,7 +207,6 @@ export default function InventoryHistoryPage() {
   const items = historyData?.results || [];
   const startingItemNumber = (currentPage - 1) * itemsPerPage + 1;
 
-  // Boshlang'ich yuklanish holati
   if (isLoading && !historyData && !error) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -176,7 +216,6 @@ export default function InventoryHistoryPage() {
     );
   }
 
-  // Boshlang'ich yuklashda xatolik
   if (error && !historyData) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-background p-6">
@@ -222,7 +261,6 @@ export default function InventoryHistoryPage() {
                 />
               </div>
             </div>
-            {/* Keyingi yuklashda xatolik bo'lsa (ma'lumotlar allaqachon bor) */}
             {error && historyData && (
               <div className="mt-4 p-3 bg-destructive/10 text-destructive text-sm rounded-md flex justify-between items-center">
                 <span>Xatolik: {error}</span>
@@ -232,8 +270,7 @@ export default function InventoryHistoryPage() {
               </div>
             )}
           </CardHeader>
-          <CardContent className="p-0 relative"> {/* Yuklagich uchun relative */}
-            {/* Keyingi sahifalarni yuklash uchun indikator */}
+          <CardContent className="p-0 relative"> 
             {isLoading && historyData && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/60 dark:bg-background/80 z-20 rounded-b-lg">
                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -257,6 +294,13 @@ export default function InventoryHistoryPage() {
                   {items.length > 0 ? (
                     items.map((item, index) => {
                       const visuals = getOperationVisuals(item.quantity);
+                      // --- Izohni formatlash (API dan kelgan `item.comment` va `item.product?.name` ishlatiladi) ---
+                      const displayComment = formatDisplayComment(
+                        item.operation_type_display,
+                        item.comment, // API dan keladigan, foydalanuvchi kiritgan yoki bo'sh bo'lishi mumkin bo'lgan izoh
+                        item.product?.name
+                      );
+                      // --- /Izohni formatlash ---
                       return (
                         <TableRow key={item.id} className={visuals.rowClass}>
                           <TableCell className="px-3 sm:px-4 py-3 text-muted-foreground">
@@ -291,18 +335,20 @@ export default function InventoryHistoryPage() {
                           <TableCell className="px-3 sm:px-4 py-3">{item.operation_type_display}</TableCell>
                           <TableCell className="px-3 sm:px-4 py-3">{item.kassa?.name || "-"}</TableCell>
                           <TableCell className="px-3 sm:px-4 py-3">{item.user?.username || "-"}</TableCell>
+                          {/* --- O'ZGARTIRILGAN IZOHNI KO'RSATISH --- */}
                           <TableCell className="px-3 sm:px-4 py-3 text-foreground/90 max-w-[250px] break-words leading-relaxed">
-                            {item.comment || "-"}
+                            {displayComment}
                           </TableCell>
+                          {/* --- /O'ZGARTIRILGAN IZOHNI KO'RSATISH --- */}
                           <TableCell className="px-3 sm:px-4 py-3 text-right">{formatDate(item.timestamp)}</TableCell>
                         </TableRow>
                       );
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-48 text-center"> {/* Balandlik oshirildi */}
+                      <TableCell colSpan={8} className="h-48 text-center"> 
                         <div className="flex flex-col items-center justify-center text-muted-foreground">
-                            <Inbox className="h-16 w-16 mb-3" /> {/* Ikonka kattalashtirildi */}
+                            <Inbox className="h-16 w-16 mb-3" /> 
                             <p className="text-base font-medium">
                                 {searchTerm ? "Qidiruv bo'yicha yozuvlar topilmadi." : "Hozircha harakatlar tarixi mavjud emas."}
                             </p>
@@ -319,7 +365,6 @@ export default function InventoryHistoryPage() {
               </Table>
             </div>
           </CardContent>
-           {/* Paginatsiya */}
            {pageInfo.totalItems > itemsPerPage && (
                 <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-t border-border text-sm">
                     <span className="text-muted-foreground mb-2 sm:mb-0">
