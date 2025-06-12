@@ -524,15 +524,10 @@ export default function PosPage() {
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
                 <DialogTitle>Sotuv: {selectedProductForSale.name || "Nomsiz mahsulot"}</DialogTitle>
-                <DialogDescription>
-                    Mahsulot sotuvi uchun {isCustomerInfoRequired ? "mijoz ma'lumotlarini va " : ""}sotuv narxini kiriting.
-                    {isCustomerInfoRequired && <><span className="text-destructive"> *</span> bilan belgilangan maydonlar majburiy.</>}
-                    {isCustomerInfoRequired && <span className="block text-xs mt-1">Telefon raqamini 998901234567 formatida kiriting.</span>}
-                </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-3 custom-scrollbar">
               <div className="text-sm space-y-1 bg-gray-50 p-3 rounded-md border">
-                <p><strong>Asl narxi (API dan olingan):</strong></p>
+                <p><strong>Mahsulot narxi:</strong></p>
                 <div className="pl-2">{getDisplayPriceElements(selectedProductForSale)}</div>
                 <p><strong>Omborda mavjud:</strong> {selectedProductForSale.quantity_in_stock} dona</p>
               </div>
@@ -563,7 +558,7 @@ export default function PosPage() {
                   </div>
                   <div>
                       <label htmlFor="modalCustomerAddress" className="block text-xs font-medium text-gray-700 mb-0.5">
-                          Manzil (ixtiyoriy)
+                          Manzili
                       </label>
                       <Input id="modalCustomerAddress" type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Masalan: Toshkent sh., Chilanzar tumani" />
                   </div>
@@ -585,21 +580,6 @@ export default function PosPage() {
                     </label>
                     <Input id="salePriceNaqd" type="number" value={actualSalePrice} onChange={(e) => setActualSalePrice(e.target.value)} placeholder={`Narxni ${saleCurrency} da kiriting`} min="0.01" step="any"/>
                 </div>
-                { ((saleCurrency === 'UZS' && hasUzsPriceForSelected) || (saleCurrency === 'USD' && hasUsdPriceForSelected)) && (
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="p-0 h-auto text-xs"
-                    onClick={() => {
-                      if (saleCurrency === 'UZS' && selectedProductForSale.price_uzs) {
-                        setActualSalePrice(selectedProductForSale.price_uzs);
-                      } else if (saleCurrency === 'USD' && selectedProductForSale.price_usd) {
-                        setActualSalePrice(selectedProductForSale.price_usd);
-                      }
-                    }}>
-                    Asl narxni ({saleCurrency}) ishlatish
-                  </Button>
-                )}
               </div>
             </div>
             <DialogFooter>

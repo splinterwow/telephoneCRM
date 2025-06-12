@@ -9,8 +9,6 @@ import axios from "axios";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-// Checkbox importi ishlatilmayotgan edi, agar kerak bo'lsa qoldiring
-// import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -53,16 +51,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { AddProductDialog, DialogView as AddDialogView } from "@/components/Products/AddProductDialog";
-import { EditProductDialog } from "@/components/Products/EditProductDialog";
+// Bu importlar sizning loyihangizdagi joylashuviga mos kelishi kerak
+import { AddProductDialog, DialogView as AddDialogView } from "@/components/Products/AddProductDialog"; 
+import { EditProductDialog } from "@/components/Products/EditProductDialog"; 
+// Agar "@/lib/utils" mavjud bo'lmasa, uni olib tashlang yoki yarating
+// import { cn } from "@/lib/utils"; 
+
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import JsBarcode from "jsbarcode";
 
 const API_URL_PRODUCTS_LISTING =
   "https://smartphone777.pythonanywhere.com/api/products/";
-// const API_URL_PRODUCT_OPERATIONS = // Bu ishlatilmayotganga o'xshaydi, agar kerak bo'lsa qoldiring
-//   "https://smartphone777.pythonanywhere.com/api/products/";
 const API_URL_CATEGORIES =
   "https://smartphone777.pythonanywhere.com/api/categories/";
 
@@ -83,7 +83,8 @@ interface Product {
   purchase_date?: string | null;
   is_active: boolean;
   description?: string | null;
-  customer_full_name?: string | null;
+  supplier_name_manual?: string | null;
+  supplier_phone_manual?: string | null;
 }
 
 interface Category {
@@ -94,14 +95,14 @@ interface Category {
 }
 
 interface BarcodeDisplayProps {
-  value: string;
-  className?: string;
-  barWidth?: number;
-  barHeight?: number;
-  fontSize?: number;
-  textMargin?: number;
-  svgMargin?: number;
-  displayValue?: boolean;
+    value: string;
+    className?: string;
+    barWidth?: number;
+    barHeight?: number;
+    fontSize?: number;
+    textMargin?: number;
+    svgMargin?: number;
+    displayValue?: boolean;
 }
 
 const BarcodeDisplay: React.FC<BarcodeDisplayProps> = ({
@@ -142,6 +143,7 @@ const BarcodeDisplay: React.FC<BarcodeDisplayProps> = ({
   return <svg ref={barcodeRef} className={className}></svg>;
 };
 
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -163,7 +165,6 @@ export default function ProductsPage() {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  // Ommaviy chop etish uchun state-lar (qisqartirilgan)
   const [eligibleProductsForPrint, setEligibleProductsForPrint] = useState<Product[]>([]);
   const [selectedProductsToPrint, setSelectedProductsToPrint] = useState<Record<number, boolean>>({});
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -227,14 +228,9 @@ export default function ProductsPage() {
       let fetchedProducts: Product[] = [];
       if ("results" in response.data && Array.isArray(response.data.results)) {
         fetchedProducts = response.data.results;
-        if(response.data.count > fetchedProducts.length) {
-          console.warn("Pagination aniqlandi, lekin barcha mahsulotlar yuklanmadi. Hozircha faqat birinchi sahifa ishlatilmoqda.");
-          // TODO: Agar kerak bo'lsa, pagination logikasini qo'shing
-        }
       } else if (Array.isArray(response.data)) {
         fetchedProducts = response.data;
       } else {
-        console.error("Mahsulot ma'lumotlari kutilgan formatda emas:", response.data);
         setError("Mahsulot ma'lumotlari noto'g'ri formatda keldi.");
         setProducts([]);
         setIsLoading(false);
@@ -243,18 +239,12 @@ export default function ProductsPage() {
       setProducts(fetchedProducts.filter((p) => p.is_active === true).reverse());
     } catch (err: any) {
       if (err.response?.status === 401) { setError("Sessiya muddati tugagan. Iltimos, qayta tizimga kiring."); navigate("/login");
-      } else if (err.code === "ECONNABORTED" || err.message.includes("timeout")) { setError("Serverga ulanishda vaqt tugadi. Internet aloqasini tekshiring yoki keyinroq urinib ko'ring.");
+      } else if (err.code === "ECONNABORTED" || err.message.includes("timeout")) { setError("Serverga ulanishda vaqt tugadi.");
       } else {
-        let errMsg = "Ma'lumotlarni yuklashda noma'lum xatolik yuz berdi.";
-        if (err.response?.data) {
-          if (err.response.data.detail) errMsg = err.response.data.detail;
-          else if (typeof err.response.data === "object") {
-            const errors = Object.entries(err.response.data).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`).join("; ");
-            if (errors) errMsg = errors;
-          }
-        } else if (err.message) errMsg = err.message;
+        let errMsg = "Ma'lumotlarni yuklashda noma'lum xatolik.";
+        if (err.response?.data?.detail) errMsg = err.response.data.detail;
+        else if (err.message) errMsg = err.message;
         setError(`Xatolik: ${errMsg}`);
-        console.error("Mahsulotlarni yuklashda xatolik:", err.response || err);
       }
       setProducts([]);
     } finally {
@@ -265,62 +255,38 @@ export default function ProductsPage() {
   const fetchCategories = useCallback(async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      if (!token) {
-        // Agar kategoriyalarni yuklash uchun ham login kerak bo'lsa:
-        // toast.error("Avtorizatsiya qilinmagan.");
-        // navigate("/login");
-        return;
-      }
+      if (!token) { return; }
       const response = await axios.get<Category[]>(API_URL_CATEGORIES, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 15000, // Timeout qo'shildi
+        headers: { Authorization: `Bearer ${token}` }, timeout: 15000,
       });
       setCategories(response.data);
     } catch (err: any) {
-      console.error("Kategoriyalarni yuklashda xatolik:", err.response || err);
-      toast.error("Kategoriyalarni yuklashda xatolik yuz berdi.");
+      toast.error("Kategoriyalarni yuklashda xatolik.");
     }
-  }, [/* navigate - agar login kerak bo'lsa */]);
+  }, []);
 
   const handleSaveNewCategory = async () => {
     if (!newCategoryData.name.trim()) {
-        toast.error("Kategoriya nomi kiritilishi shart.");
-        return;
+        toast.error("Kategoriya nomi kiritilishi shart."); return;
     }
     setIsSubmittingCategory(true);
     try {
         const token = localStorage.getItem("accessToken");
         if (!token) {
-            toast.error("Avtorizatsiya qilinmagan. Iltimos, tizimga kiring.");
-            navigate("/login"); // Agar kerak bo'lsa
-            setIsSubmittingCategory(false);
-            return;
+            toast.error("Avtorizatsiya qilinmagan."); navigate("/login");
+            setIsSubmittingCategory(false); return;
         }
         await axios.post(API_URL_CATEGORIES, newCategoryData, {
-            headers: { Authorization: `Bearer ${token}` },
-            timeout: 15000, // Timeout qo'shildi
+            headers: { Authorization: `Bearer ${token}` }, timeout: 15000,
         });
-        toast.success(`"${newCategoryData.name}" kategoriyasi muvaffaqiyatli qo'shildi!`);
+        toast.success(`"${newCategoryData.name}" kategoriyasi qo'shildi!`);
         setIsAddCategoryModalOpen(false);
         setNewCategoryData({ name: "", description: "", barcode_prefix: "" });
-        fetchCategories(); // Kategoriyalar ro'yxatini yangilash
+        fetchCategories();
     } catch (err: any) {
-        console.error("Kategoriyani saqlashda xatolik:", err.response?.data || err);
-        let errMsg = "Kategoriyani saqlashda noma'lum xatolik.";
-        if (err.response?.data) {
-            if (err.response.data.detail) errMsg = err.response.data.detail;
-            else if (typeof err.response.data === "object") {
-                const errors = Object.entries(err.response.data)
-                    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
-                    .join("; ");
-                if (errors) errMsg = errors;
-            }
-        } else if (err.message) {
-          errMsg = err.message;
-        }
-        if (err.code === "ECONNABORTED" || err.message.includes("timeout")) {
-          errMsg = "Serverga ulanishda vaqt tugadi.";
-        }
+        let errMsg = "Kategoriyani saqlashda xatolik.";
+        if (err.response?.data?.detail) errMsg = err.response.data.detail;
+        else if (err.message) errMsg = err.message;
         toast.error(`Xatolik: ${errMsg}`);
     } finally {
         setIsSubmittingCategory(false);
@@ -333,56 +299,39 @@ export default function ProductsPage() {
   }, [fetchProducts, fetchCategories]);
 
   const filteredProducts = useMemo(() => {
-    const trimmedSearch = search.trim();
+    const trimmedSearch = search.trim().toLowerCase();
     if (!trimmedSearch) return products;
-    const lowerCaseSearch = trimmedSearch.toLowerCase();
-    
-    return products.filter((product) => {
-      const nameMatch = product.name?.toLowerCase().includes(lowerCaseSearch);
-      const customerNameMatch = product.customer_full_name?.toLowerCase().includes(lowerCaseSearch);
-      const barcodeMatch = product.barcode?.toLowerCase().includes(lowerCaseSearch);
-      const categoryNameMatch = product.category_name?.toLowerCase().includes(lowerCaseSearch);
-      const colorMatch = product.color?.toLowerCase().includes(lowerCaseSearch);
-      const seriesRegionMatch = product.series_region?.toLowerCase().includes(lowerCaseSearch);
-
-      return nameMatch || customerNameMatch || barcodeMatch || categoryNameMatch || colorMatch || seriesRegionMatch;
-    });
+    return products.filter((p) => 
+        p.name?.toLowerCase().includes(trimmedSearch) ||
+        p.supplier_name_manual?.toLowerCase().includes(trimmedSearch) ||
+        p.barcode?.toLowerCase().includes(trimmedSearch) ||
+        p.category_name?.toLowerCase().includes(trimmedSearch) ||
+        p.color?.toLowerCase().includes(trimmedSearch) ||
+        p.series_region?.toLowerCase().includes(trimmedSearch)
+    );
   }, [products, search]);
 
   const handleProductAdded = (newlyAddedProduct: Product) => {
-    fetchProducts();
-    setIsAddProductDialogOpen(false);
-    toast.success(`"${newlyAddedProduct.name}" muvaffaqiyatli qo'shildi!`);
+    fetchProducts(); setIsAddProductDialogOpen(false);
+    toast.success(`"${newlyAddedProduct.name}" qo'shildi!`);
   };
 
   const handleProductSuccessfullyEdited = (editedProduct: Product) => {
-    fetchProducts();
-    setIsEditDialogOpen(false);
-    setSelectedProductForEdit(null);
-    toast.success(`"${editedProduct.name}" muvaffaqiyatli tahrirlandi!`);
+    fetchProducts(); setIsEditDialogOpen(false); setSelectedProductForEdit(null);
+    toast.success(`"${editedProduct.name}" tahrirlandi!`);
   };
 
   const handleDeleteConfirmation = async () => {
     if (!productToDelete) return;
     try {
       const token = localStorage.getItem("accessToken");
-      if (!token) {
-        toast.error("Avtorizatsiya qilinmagan.");
-        navigate("/login");
-        return;
-      }
-      // is_active=false qilib PATCH so'rovini yuborish
-      await axios.patch(
-        `${API_URL_PRODUCTS_LISTING}${productToDelete.id}/`,
-        { is_active: false },
+      if (!token) { toast.error("Avtorizatsiya qilinmagan."); navigate("/login"); return; }
+      await axios.patch(`${API_URL_PRODUCTS_LISTING}${productToDelete.id}/`, { is_active: false },
         { headers: { Authorization: `Bearer ${token}` }, timeout: 15000 }
       );
-      toast.success(`"${productToDelete.name}" muvaffaqiyatli arxivlandi.`);
-      fetchProducts(); // Mahsulotlar ro'yxatini yangilash
-      setIsDeleteDialogOpen(false);
-      setProductToDelete(null);
+      toast.success(`"${productToDelete.name}" arxivlandi.`);
+      fetchProducts(); setIsDeleteDialogOpen(false); setProductToDelete(null);
     } catch (error: any) {
-      console.error("Mahsulotni arxivlashda xatolik:", error.response || error);
       toast.error("Mahsulotni arxivlashda xatolik: " + (error.response?.data?.detail || error.message));
     }
   };
@@ -390,76 +339,45 @@ export default function ProductsPage() {
   const openEditDialog = (product: Product) => { setSelectedProductForEdit(product); setIsEditDialogOpen(true); };
   const openDeleteDialog = (product: Product) => { setProductToDelete(product); setIsDeleteDialogOpen(true); };
   
-  // Ommaviy chop etish funksiyalari (qisqartirilgan)
   const handleOpenPrintModal = () => {
     const itemsToPrint = filteredProducts.filter(p => p.barcode && p.barcode.trim() !== "");
-    if (itemsToPrint.length === 0) {
-        toast.info("Chop etish uchun yaroqli (shtrixkodli) mahsulotlar topilmadi.");
-        return;
-    }
+    if (itemsToPrint.length === 0) { toast.info("Chop etish uchun yaroqli mahsulot topilmadi."); return; }
     setEligibleProductsForPrint(itemsToPrint);
-    // Barcha yaroqli mahsulotlarni dastlab tanlanmagan qilib belgilash
-    const initialSelection = itemsToPrint.reduce((acc, p) => ({ ...acc, [p.id]: false }), {});
-    setSelectedProductsToPrint(initialSelection);
+    setSelectedProductsToPrint(itemsToPrint.reduce((acc, p) => ({ ...acc, [p.id]: false }), {}));
     setIsPrintModalOpen(true);
   };
 
   const printContentBulk = (items: Product[]) => {
-    if (items.length === 0) {
-      toast.info("Chop etish uchun mahsulot tanlanmagan.");
-      return;
-    }
-    // ... (chop etish logikasi, kerak bo'lsa JsBarcode ishlatiladi)
-    // Bu yerda items - faqat TANLANGAN mahsulotlar bo'lishi kerak
+    if (items.length === 0) { toast.info("Chop etish uchun mahsulot tanlanmagan."); return; }
     const printWindow = window.open('', '_blank', 'height=600,width=800');
     if (printWindow) {
         printWindow.document.write('<html><head><title>Shtrixkodlar</title>');
-        printWindow.document.write('<style>body{font-family: Arial, sans-serif; margin: 20px;} .barcode-item { display: inline-block; text-align: center; margin: 10px; padding: 10px; border: 1px solid #ccc; page-break-inside: avoid; } .barcode-item svg { display: block; margin: 0 auto 5px auto; } .product-name { font-size: 10px; margin-bottom: 3px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;} .price { font-size: 11px; font-weight: bold; } @media print { .no-print { display: none; } body { margin: 0; } }</style>');
+        printWindow.document.write('<style>body{font-family: Arial, sans-serif; margin: 20px;} .barcode-item { display: inline-block; text-align: center; margin: 10px; padding: 10px; border: 1px solid #ccc; page-break-inside: avoid; position: relative; } .shop-name-bulk { position: absolute; top: 3px; right: 5px; font-size: 7px; color: #888; } .barcode-item svg { display: block; margin: 0 auto 5px auto; } .product-name { font-size: 10px; margin-bottom: 3px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;} .product-detail-bulk { font-size: 9px; margin-bottom: 2px; color: #333;} .price { font-size: 11px; font-weight: bold; } @media print { .no-print { display: none; } body { margin: 0; } }</style>');
         printWindow.document.write('</head><body>');
-        
         items.forEach(product => {
-            const priceDisplay = formatCombinedPrice(product.price_usd, product.price_uzs, true);
-            printWindow.document.write(`<div class="barcode-item">`);
-            printWindow.document.write(`<div class="product-name" title="${product.name}">${product.name}</div>`);
-            if (priceDisplay !== "-") {
-              printWindow.document.write(`<div class="price">${priceDisplay}</div>`);
+            const productType = determineProductTypeForDisplay(product);
+            let contentHtml = `<div class="shop-name-bulk">Apple777</div>`;
+            contentHtml += `<div class="product-name" title="${product.name}">${product.name}</div>`;
+            if (productType === "iPhone") {
+                if (product.storage_capacity) contentHtml += `<div class="product-detail-bulk">Xotira: ${product.storage_capacity}</div>`;
+                if (product.battery_health) contentHtml += `<div class="product-detail-bulk">Batareya: ${product.battery_health}%</div>`;
+            } else if (productType === "Android") {
+                if (product.storage_capacity) contentHtml += `<div class="product-detail-bulk">Xotira: ${product.storage_capacity}</div>`;
+            } else { 
+                const priceDisplay = formatCombinedPrice(product.price_usd, product.price_uzs, true);
+                if (priceDisplay !== "-") contentHtml += `<div class="price">${priceDisplay}</div>`;
             }
-            // BarcodeDisplay komponentini bu yerda to'g'ridan-to'g'ri ishlata olmaymiz,
-            // shuning uchun JsBarcode'ni chaqirish kerak bo'ladi yoki SVG'ni serverda generatsiya qilish.
-            // Hozircha faqat shtrixkod qiymatini chiqaramiz.
-            // Yoki BarcodeDisplay'dagi SVG generatsiya logikasini bu yerga ko'chirish mumkin.
-            const barcodeSvgContainerId = `barcode-svg-${product.id}-${Math.random().toString(36).substring(7)}`;
-            printWindow.document.write(`<svg id="${barcodeSvgContainerId}"></svg>`);
-            printWindow.document.write(`</div>`);
-
-            // JsBarcode ni yangi document contextida ishlatish
-            const svgElement = printWindow.document.getElementById(barcodeSvgContainerId);
+            const barcodeSvgId = `barcode-svg-bulk-${product.id}-${Math.random().toString(36).substring(7)}`;
+            printWindow.document.write(`<div class="barcode-item">${contentHtml}<svg id="${barcodeSvgId}"></svg></div>`);
+            const svgElement = printWindow.document.getElementById(barcodeSvgId);
             if (svgElement && product.barcode) {
-                try {
-                    JsBarcode(svgElement, product.barcode, {
-                        format: "CODE128",
-                        lineColor: "#000000",
-                        width: 1.2, //kichikroq qilingan
-                        height: 25, //kichikroq qilingan
-                        displayValue: true,
-                        fontSize: 10, //kichikroq qilingan
-                        textMargin: 0,
-                        margin: 2,
-                    });
-                } catch (e) {
-                    console.error("JsBarcode xatosi (ommaviy chop etish): ", e);
-                    svgElement.innerHTML = `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="10" fill="red">Xato</text>`;
-                }
+                try { JsBarcode(svgElement, product.barcode, { format: "CODE128", lineColor: "#000000", width: 1.1, height: 22, displayValue: true, fontSize: 9, textMargin: 0, margin: 2 });
+                } catch (e) { svgElement.innerHTML = `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="9" fill="red">Xato</text>`; }
             }
         });
-
-        printWindow.document.write('</body></html>');
-        printWindow.document.close();
-        printWindow.focus();
-        // setTimeout(() => { printWindow.print(); /* printWindow.close(); */ }, 500); // Ba'zi brauzerlar uchun kechiktirish
-    } else {
-        toast.error("Chop etish oynasini ochib bo'lmadi. Pop-up bloklagichini tekshiring.");
-    }
+        printWindow.document.write('</body></html>'); printWindow.document.close(); printWindow.focus();
+        setTimeout(() => { try { printWindow.print(); } catch (e) { toast.error("Chop etish oynasini avtomatik ishga tushirib bo'lmadi."); } }, 500); 
+    } else { toast.error("Chop etish oynasini ochib bo'lmadi."); }
     setIsPrintModalOpen(false);
   };
 
@@ -469,51 +387,128 @@ export default function ProductsPage() {
       return;
     }
     setPrintingProductId(product.id);
-    // Bu yerda API'dan mahsulotning eng so'nggi ma'lumotlarini olishingiz mumkin, agar kerak bo'lsa.
-    // Hozircha mavjud 'product' obyektidan foydalanamiz.
+
     try {
-      // Misol uchun, agar API'dan qayta yuklash kerak bo'lsa:
-      // const token = localStorage.getItem("accessToken");
-      // const response = await axios.get(`${API_URL_PRODUCTS_LISTING}${product.id}/`, { headers: { Authorization: `Bearer ${token}` } });
-      // const freshProductData = response.data;
-      
-      const printWindow = window.open('', '_blank', 'height=400,width=300');
+      const printWindow = window.open('', '_blank', 'height=300,width=250');
       if (printWindow) {
         printWindow.document.write('<html><head><title>Yorliq</title>');
-        printWindow.document.write('<style>body{font-family: Arial, sans-serif; text-align: center; margin: 10px;} svg{display: block; margin: 5px auto;} .product-name { font-size: 11px; margin-bottom: 3px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; margin-right: auto; } .price { font-size: 12px; font-weight: bold; margin-bottom: 5px; } @media print { body { margin: 0; } }</style>');
+        printWindow.document.write(`
+          <style>
+            @page { 
+                size: 50mm 30mm; 
+                margin: 0; 
+            }
+            body { 
+              font-family: Arial, sans-serif; text-align: center; margin: 0;
+              padding: 1.5mm; width: calc(50mm - 3mm); height: calc(30mm - 3mm);
+              display: flex; flex-direction: column; align-items: center; justify-content: space-between; /* Elementlarni vertikal taqsimlash */
+              box-sizing: border-box; overflow: hidden;
+            }
+            .label-content-wrapper {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start; /* Kontentni tepaga surish */
+                flex-grow: 1; /* Shtrixkod pastda qolishi uchun */
+            }
+            .header-info {
+                width: 100%;
+                display: flex;
+                justify-content: flex-end;
+                align-items: flex-start; /* Tepaga tekislash */
+                height: auto; /* Balandlikni kontentga moslashtirish */
+                margin-bottom: 0.5mm; 
+            }
+            .shop-name {
+                font-size: 8.5px; /* Biroz kattaroq */
+                font-weight: 600; 
+                color: #333;
+                padding-right: 0.5mm;
+            }
+            .main-product-info {
+                text-align: center;
+                margin-bottom: 1mm; /* Shtrixkoddan oldingi masofa */
+            }
+            svg { 
+                display: block; 
+                margin-left: auto; 
+                margin-right: auto; 
+                margin-bottom: 0; /* Pastki masofani olib tashlash */
+                /* margin-top: auto; */ /* Shtrixkodni pastga surish uchun */
+            }
+            .product-name-main { 
+              font-size: 12.5px; 
+              font-weight: bold; margin-bottom: 1px; line-height: 1.1; 
+              max-width: 46mm; overflow: hidden; text-overflow: ellipsis; 
+            }
+            .product-detail { 
+              font-size: 9.5px; 
+              margin-bottom: 1px; line-height: 1.1; 
+            }
+            .price-accessory { 
+              font-size: 10.5px; 
+              font-weight: 500; 
+              margin-bottom: 1.5px; line-height: 1.1;
+            }
+          </style>
+        `);
         printWindow.document.write('</head><body>');
+        printWindow.document.write('<div class="label-content-wrapper">');
+
+        printWindow.document.write('<div class="header-info">');
+        printWindow.document.write('<span class="shop-name">Apple777</span>');
+        printWindow.document.write('</div>');
         
-        const priceDisplay = formatCombinedPrice(product.price_usd, product.price_uzs, true);
-        printWindow.document.write(`<div class="product-name" title="${product.name}">${product.name}</div>`);
-        if (priceDisplay !== "-") {
-          printWindow.document.write(`<div class="price">${priceDisplay}</div>`);
+        printWindow.document.write('<div class="main-product-info">');
+        const productType = determineProductTypeForDisplay(product);
+        printWindow.document.write(`<div class="product-name-main" title="${product.name}">${product.name}</div>`);
+
+        if (productType === "iPhone") {
+            if (product.storage_capacity) {
+                printWindow.document.write(`<div class="product-detail">Xotira: ${product.storage_capacity}</div>`);
+            }
+            if (product.battery_health) {
+                printWindow.document.write(`<div class="product-detail">Batareya holati: ${product.battery_health}%</div>`);
+            }
+        } else if (productType === "Android") {
+            if (product.storage_capacity) {
+                printWindow.document.write(`<div class="product-detail">Xotira: ${product.storage_capacity}</div>`);
+            }
+        } else { 
+            const priceDisplay = formatCombinedPrice(product.price_usd, product.price_uzs, true);
+            if (priceDisplay !== "-") {
+              printWindow.document.write(`<div class="price-accessory">${priceDisplay}</div>`);
+            }
         }
-        const barcodeSvgContainerId = `barcode-svg-single-${product.id}`;
-        printWindow.document.write(`<svg id="${barcodeSvgContainerId}"></svg>`);
+        printWindow.document.write('</div>'); 
         
+        const barcodeSvgContainerId = `barcode-svg-single-${product.id}`;
+        printWindow.document.write(`<svg id="${barcodeSvgContainerId}"></svg>`); // Shtrixkodni wrapperdan tashqariga yoki pastiga
+        
+        printWindow.document.write('</div>'); // .label-content-wrapper
         printWindow.document.write('</body></html>');
         printWindow.document.close();
 
         const svgElement = printWindow.document.getElementById(barcodeSvgContainerId);
         if (svgElement && product.barcode) {
             JsBarcode(svgElement, product.barcode, {
-                format: "CODE128",
-                lineColor: "#000000",
-                width: 1.5, // Biroz kattaroq
-                height: 40, // Biroz balandroq
-                displayValue: true,
-                fontSize: 12,
-                textMargin: 2,
-                margin: 5,
+                format: "CODE128", lineColor: "#000000",
+                width: 1.3, height: 32, /* Shtrixkod balandligini biroz kamaytirdim */
+                displayValue: true, 
+                fontSize: 10, /* Shtrixkod ostidagi raqamlar */
+                textMargin: 0.5, margin: 2,
             });
         }
         printWindow.focus();
-        // setTimeout(() => { printWindow.print(); /* printWindow.close(); */ }, 250);
+        setTimeout(() => { 
+            try { printWindow.print(); } 
+            catch (e) { toast.error("Chop etish oynasini avtomatik ishga tushirib bo'lmadi."); }
+        }, 300);
       } else {
         toast.error("Chop etish oynasini ochib bo'lmadi.");
       }
     } catch (error) {
-      console.error("Yorliq chop etishda xatolik:", error);
       toast.error("Yorliq chop etishda xatolik yuz berdi.");
     } finally {
       setPrintingProductId(null);
@@ -525,11 +520,7 @@ export default function ProductsPage() {
   };
   
   const handleSelectAllForPrint = (selectAll: boolean) => {
-    const newSelection: Record<number, boolean> = {};
-    eligibleProductsForPrint.forEach(p => {
-        newSelection[p.id] = selectAll;
-    });
-    setSelectedProductsToPrint(newSelection);
+    setSelectedProductsToPrint(eligibleProductsForPrint.reduce((acc, p) => ({ ...acc, [p.id]: selectAll }), {}));
   };
 
   const getSelectedItemsForActualPrint = () => {
@@ -541,34 +532,9 @@ export default function ProductsPage() {
     const ids = idStr.split(/[\s,;]+/).filter(Boolean);
     if (ids.length === 0) return "-";
     if (ids.length === 1) return ids[0];
-
-    const triggerContent = (
-      <span className="cursor-help underline decoration-dotted">
-        {ids[0]} ({ids.length} ta) <Info size={12} className="inline ml-1 align-middle" />
-      </span>
-    );
-
-    return (
-      <TooltipProvider delayDuration={100}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {triggerContent}
-          </TooltipTrigger>
-          <TooltipContent
-            className="max-w-xs break-words bg-popover text-popover-foreground shadow-md rounded-md p-2 z-50" // z-index qo'shildi
-            side="top"
-          >
-            {ids.map((im, idx) => (
-              <div key={idx} className="text-xs">
-                {im}
-              </div>
-            ))}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
+    const triggerContent = (<span className="cursor-help underline decoration-dotted">{ids[0]} ({ids.length} ta) <Info size={12} className="inline ml-1 align-middle" /></span>);
+    return (<TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>{triggerContent}</TooltipTrigger><TooltipContent className="max-w-xs break-words bg-popover text-popover-foreground shadow-md rounded-md p-2 z-50" side="top">{ids.map((im, idx) => (<div key={idx} className="text-xs">{im}</div>))}</TooltipContent></Tooltip></TooltipProvider>);
   };
-
 
   return (
     <TooltipProvider>
@@ -593,7 +559,7 @@ export default function ProductsPage() {
           </div>
         </header>
         <Card className="flex-grow flex flex-col overflow-hidden shadow-sm border">
-          <CardHeader className="border-b px-4 py-3 sm:px-6 sm:py-4">
+            <CardHeader className="border-b px-4 py-3 sm:px-6 sm:py-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
               <div>
                 <CardTitle className="text-lg sm:text-xl">Mahsulotlar Ro‘yxati</CardTitle>
@@ -627,11 +593,11 @@ export default function ProductsPage() {
                 <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
                   <TableRow>
                     <TableHead className="w-[180px] px-2 py-2.5 sm:px-4">Nomi</TableHead>
-                    <TableHead className="hidden md:table-cell px-2 py-2.5 sm:px-4">Mijoz Ismi</TableHead>
+                    <TableHead className="hidden md:table-cell px-2 py-2.5 sm:px-4">Mijoz (Yetkazib beruvchi)</TableHead> 
                     <TableHead className="hidden xl:table-cell px-2 sm:px-4">Shtrix/IMEI</TableHead>
                     <TableHead className="px-2 sm:px-4">Turi</TableHead>
-                    <TableHead className="px-2 sm:px-4">Sotish narxi</TableHead>
                     <TableHead className="hidden md:table-cell px-2 sm:px-4">Olingan narx</TableHead>
+                    <TableHead className="px-2 sm:px-4">Sotish narxi</TableHead>
                     <TableHead className="hidden lg:table-cell px-2 sm:px-4">Xotira</TableHead>
                     <TableHead className="hidden sm:table-cell px-2 sm:px-4">Rangi</TableHead>
                     <TableHead className="text-right w-[130px] px-2 py-2.5 sm:px-4">Amallar</TableHead>
@@ -642,12 +608,12 @@ export default function ProductsPage() {
                     <TableRow key={p.id} className="hover:bg-muted/50">
                       <TableCell className="font-medium px-2 py-2.5 sm:px-4 break-all max-w-[180px]">{p.name || "-"}</TableCell>
                       <TableCell className="hidden md:table-cell px-2 py-2.5 sm:px-4">
-                        {p.customer_full_name || "-"}
+                        {p.supplier_name_manual || (determineProductTypeForDisplay(p) === "Aksesuar" ? "-" : "Noma'lum")} 
                       </TableCell>
                       <TableCell className="hidden xl:table-cell px-2 sm:px-4">{formatIdentifierForDisplay(p.barcode)}</TableCell>
                       <TableCell className="px-2 sm:px-4">{determineProductTypeForDisplay(p)}</TableCell>
-                      <TableCell className="px-2 sm:px-4 whitespace-nowrap">{formatCombinedPrice(p.price_usd, p.price_uzs)}</TableCell>
                       <TableCell className="hidden md:table-cell px-2 sm:px-4 whitespace-nowrap">{formatCombinedPrice(p.purchase_price_usd, p.purchase_price_uzs)}</TableCell>
+                      <TableCell className="px-2 sm:px-4 whitespace-nowrap">{formatCombinedPrice(p.price_usd, p.price_uzs)}</TableCell>
                       <TableCell className="hidden lg:table-cell px-2 sm:px-4">{p.storage_capacity || "-"}</TableCell>
                       <TableCell className="hidden sm:table-cell px-2 sm:px-4">{p.color || "-"}</TableCell>
                       <TableCell className="text-right px-2 py-2.5 sm:px-4">
@@ -687,153 +653,18 @@ export default function ProductsPage() {
                   {search ? "Qidiruv bo'yicha mahsulot topilmadi" : "Hozircha mahsulotlar yo'q"}
                 </p>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-xs">
-                  {search ? "Boshqa kalit so'z bilan qidirib ko'ring yoki qidiruvni tozalang." : "Yangi mahsulot qo'shish uchun yuqoridagi tugmalardan foydalaning."}
+                  {search ? "Boshqa kalit so'z bilan qidirib ko'ring." : "Yangi mahsulot qo'shing."}
                 </p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {isAddProductDialogOpen && (
-          <AddProductDialog 
-            open={isAddProductDialogOpen} 
-            onOpenChange={setIsAddProductDialogOpen} 
-            onAddProduct={handleProductAdded} 
-            initialView={addDialogInitialView}
-            categories={categories} // Kategoriyalarni uzatish
-          />
-        )}
-        {isEditDialogOpen && selectedProductForEdit && (
-          <EditProductDialog 
-            open={isEditDialogOpen} 
-            onOpenChange={(isOpen) => { setIsEditDialogOpen(isOpen); if (!isOpen) setSelectedProductForEdit(null); }} 
-            product={selectedProductForEdit} 
-            onProductSuccessfullyEdited={handleProductSuccessfullyEdited} 
-            categories={categories} // Kategoriyalarni uzatish
-          />
-        )}
-        
-        {/* Delete Product Dialog */}
-        <ShadDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <ShadDialogContent>
-            <ShadDialogHeader>
-              <ShadDialogTitle>Mahsulotni arxivlashni tasdiqlaysizmi?</ShadDialogTitle>
-              <ShadDialogDescription>
-                "{productToDelete?.name}" nomli mahsulot arxivlanadi va ro'yxatda ko'rinmaydi.
-                Bu amalni orqaga qaytarish mumkin (agar backendda shunday imkoniyat bo'lsa).
-              </ShadDialogDescription>
-            </ShadDialogHeader>
-            <ShadDialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Bekor qilish</Button>
-              <Button variant="destructive" onClick={handleDeleteConfirmation}>Arxivlash</Button>
-            </ShadDialogFooter>
-          </ShadDialogContent>
-        </ShadDialog>
-
-        {/* Add Category Dialog */}
-        <ShadDialog open={isAddCategoryModalOpen} onOpenChange={(isOpen) => { setIsAddCategoryModalOpen(isOpen); if (!isOpen) setNewCategoryData({ name: "", description: "", barcode_prefix: "" }); }}>
-          <ShadDialogContent className="sm:max-w-[425px]">
-            <ShadDialogHeader>
-                <ShadDialogTitle>Yangi Kategoriya Qo'shish</ShadDialogTitle>
-                <ShadDialogDescription>
-                    Mahsulotlar uchun yangi kategoriya ma'lumotlarini kiriting.
-                </ShadDialogDescription>
-            </ShadDialogHeader>
-            <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="category-name" className="text-right">Nomi <span className="text-destructive">*</span></Label>
-                    <Input
-                        id="category-name"
-                        value={newCategoryData.name}
-                        onChange={(e) => setNewCategoryData({ ...newCategoryData, name: e.target.value })}
-                        className="col-span-3"
-                    />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="category-description" className="text-right">Tavsif</Label>
-                    <Input
-                        id="category-description"
-                        value={newCategoryData.description}
-                        onChange={(e) => setNewCategoryData({ ...newCategoryData, description: e.target.value })}
-                        className="col-span-3"
-                    />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="category-barcode-prefix" className="text-right">Shtrixkod Prefiksi</Label>
-                    <Input
-                        id="category-barcode-prefix"
-                        value={newCategoryData.barcode_prefix}
-                        onChange={(e) => setNewCategoryData({ ...newCategoryData, barcode_prefix: e.target.value })}
-                        className="col-span-3"
-                        placeholder="Masalan, 200"
-                    />
-                </div>
-            </div>
-            <ShadDialogFooter>
-                <Button variant="outline" onClick={() => setIsAddCategoryModalOpen(false)} disabled={isSubmittingCategory}>Bekor qilish</Button>
-                <Button type="button" onClick={handleSaveNewCategory} disabled={isSubmittingCategory}>
-                    {isSubmittingCategory && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Saqlash
-                </Button>
-            </ShadDialogFooter>
-          </ShadDialogContent>
-        </ShadDialog>
-        
-        {/* Print Modal */}
-        <ShadDialog open={isPrintModalOpen} onOpenChange={setIsPrintModalOpen}>
-            <ShadDialogContent className="max-w-2xl">
-                <ShadDialogHeader>
-                    <ShadDialogTitle>Ommaviy Yorliq Chop Etish</ShadDialogTitle>
-                    <ShadDialogDescription>
-                        Chop etish uchun mahsulotlarni tanlang. Faqat shtrixkodi mavjud mahsulotlar ko'rsatiladi.
-                    </ShadDialogDescription>
-                </ShadDialogHeader>
-                {eligibleProductsForPrint.length > 0 ? (
-                    <>
-                        <div className="my-4 flex justify-between items-center">
-                            <Label htmlFor="select-all-print" className="flex items-center gap-2 cursor-pointer">
-                                <input 
-                                    type="checkbox" 
-                                    id="select-all-print"
-                                    className="h-4 w-4"
-                                    checked={eligibleProductsForPrint.length > 0 && eligibleProductsForPrint.every(p => selectedProductsToPrint[p.id])}
-                                    onChange={(e) => handleSelectAllForPrint(e.target.checked)}
-                                />
-                                Barchasini tanlash
-                            </Label>
-                            <span>Tanlanganlar: {getSelectedItemsForActualPrint().length} / {eligibleProductsForPrint.length}</span>
-                        </div>
-                        <div className="max-h-[40vh] overflow-y-auto border rounded-md p-2 space-y-1">
-                            {eligibleProductsForPrint.map(p => (
-                                <div key={p.id} className="flex items-center justify-between p-1.5 hover:bg-muted/50 rounded">
-                                    <Label htmlFor={`print-check-${p.id}`} className="flex items-center gap-2 cursor-pointer text-xs flex-grow">
-                                        <input 
-                                            type="checkbox" 
-                                            id={`print-check-${p.id}`}
-                                            className="h-3.5 w-3.5"
-                                            checked={!!selectedProductsToPrint[p.id]}
-                                            onChange={() => handleTogglePrintSelection(p.id)}
-                                        />
-                                        <span className="truncate max-w-[200px] sm:max-w-xs" title={p.name}>{p.name}</span> 
-                                        <span className="text-muted-foreground">({p.barcode})</span>
-                                    </Label>
-                                    <span className="text-xs whitespace-nowrap">{formatCombinedPrice(p.price_usd, p.price_uzs, true)}</span>
-                                </div>
-                            ))}
-                        </div>
-                        <ShadDialogFooter className="mt-4">
-                            <Button variant="outline" onClick={() => setIsPrintModalOpen(false)}>Yopish</Button>
-                            <Button onClick={() => printContentBulk(getSelectedItemsForActualPrint())} disabled={getSelectedItemsForActualPrint().length === 0}>
-                                <Printer className="mr-2 h-4 w-4" /> Chop etish ({getSelectedItemsForActualPrint().length})
-                            </Button>
-                        </ShadDialogFooter>
-                    </>
-                ) : (
-                    <p className="text-center py-8 text-muted-foreground">Chop etish uchun yaroqli mahsulotlar topilmadi.</p>
-                )}
-            </ShadDialogContent>
-        </ShadDialog>
-
+        {isAddProductDialogOpen && ( <AddProductDialog open={isAddProductDialogOpen} onOpenChange={setIsAddProductDialogOpen} onAddProduct={handleProductAdded} initialView={addDialogInitialView} categories={categories} /> )}
+        {isEditDialogOpen && selectedProductForEdit && ( <EditProductDialog open={isEditDialogOpen} onOpenChange={(isOpen) => { setIsEditDialogOpen(isOpen); if (!isOpen) setSelectedProductForEdit(null); }} product={selectedProductForEdit} onProductSuccessfullyEdited={handleProductSuccessfullyEdited} categories={categories} /> )}
+        <ShadDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}> <ShadDialogContent> <ShadDialogHeader> <ShadDialogTitle>Mahsulotni arxivlashni tasdiqlaysizmi?</ShadDialogTitle> <ShadDialogDescription> "{productToDelete?.name}" nomli mahsulot arxivlanadi. </ShadDialogDescription> </ShadDialogHeader> <ShadDialogFooter> <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Bekor qilish</Button> <Button variant="destructive" onClick={handleDeleteConfirmation}>Arxivlash</Button> </ShadDialogFooter> </ShadDialogContent> </ShadDialog>
+        <ShadDialog open={isAddCategoryModalOpen} onOpenChange={(isOpen) => { setIsAddCategoryModalOpen(isOpen); if (!isOpen) setNewCategoryData({ name: "", description: "", barcode_prefix: "" }); }}> <ShadDialogContent className="sm:max-w-[425px]"> <ShadDialogHeader> <ShadDialogTitle>Yangi Kategoriya Qo'shish</ShadDialogTitle> <ShadDialogDescription> Yangi kategoriya ma'lumotlarini kiriting. </ShadDialogDescription> </ShadDialogHeader> <div className="grid gap-4 py-4"> <div className="grid grid-cols-4 items-center gap-4"> <Label htmlFor="category-name" className="text-right">Nomi <span className="text-destructive">*</span></Label> <Input id="category-name" value={newCategoryData.name} onChange={(e) => setNewCategoryData({ ...newCategoryData, name: e.target.value })} className="col-span-3"/> </div> <div className="grid grid-cols-4 items-center gap-4"> <Label htmlFor="category-description" className="text-right">Tavsif</Label> <Input id="category-description" value={newCategoryData.description} onChange={(e) => setNewCategoryData({ ...newCategoryData, description: e.target.value })} className="col-span-3"/> </div> <div className="grid grid-cols-4 items-center gap-4"> <Label htmlFor="category-barcode-prefix" className="text-right">Shtrixkod Prefiksi</Label> <Input id="category-barcode-prefix" value={newCategoryData.barcode_prefix} onChange={(e) => setNewCategoryData({ ...newCategoryData, barcode_prefix: e.target.value })} className="col-span-3" placeholder="Masalan, 200"/> </div> </div> <ShadDialogFooter> <Button variant="outline" onClick={() => setIsAddCategoryModalOpen(false)} disabled={isSubmittingCategory}>Bekor qilish</Button> <Button type="button" onClick={handleSaveNewCategory} disabled={isSubmittingCategory}> {isSubmittingCategory && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Saqlash </Button> </ShadDialogFooter> </ShadDialogContent> </ShadDialog>
+        <ShadDialog open={isPrintModalOpen} onOpenChange={setIsPrintModalOpen}> <ShadDialogContent className="max-w-2xl"> <ShadDialogHeader> <ShadDialogTitle>Ommaviy Yorliq Chop Etish</ShadDialogTitle> <ShadDialogDescription> Chop etish uchun mahsulotlarni tanlang. </ShadDialogDescription> </ShadDialogHeader> {eligibleProductsForPrint.length > 0 ? ( <> <div className="my-4 flex justify-between items-center"> <Label htmlFor="select-all-print" className="flex items-center gap-2 cursor-pointer"> <input type="checkbox" id="select-all-print" className="h-4 w-4" checked={eligibleProductsForPrint.length > 0 && eligibleProductsForPrint.every(p => selectedProductsToPrint[p.id])} onChange={(e) => handleSelectAllForPrint(e.target.checked)} /> Barchasini tanlash </Label> <span>Tanlanganlar: {getSelectedItemsForActualPrint().length} / {eligibleProductsForPrint.length}</span> </div> <div className="max-h-[40vh] overflow-y-auto border rounded-md p-2 space-y-1"> {eligibleProductsForPrint.map(p => ( <div key={p.id} className="flex items-center justify-between p-1.5 hover:bg-muted/50 rounded"> <Label htmlFor={`print-check-${p.id}`} className="flex items-center gap-2 cursor-pointer text-xs flex-grow"> <input type="checkbox" id={`print-check-${p.id}`} className="h-3.5 w-3.5" checked={!!selectedProductsToPrint[p.id]} onChange={() => handleTogglePrintSelection(p.id)} /> <span className="truncate max-w-[200px] sm:max-w-xs" title={p.name}>{p.name}</span> <span className="text-muted-foreground">({p.barcode})</span> </Label> <span className="text-xs whitespace-nowrap">{formatCombinedPrice(p.price_usd, p.price_uzs, true)}</span> </div> ))} </div> <ShadDialogFooter className="mt-4"> <Button variant="outline" onClick={() => setIsPrintModalOpen(false)}>Yopish</Button> <Button onClick={() => printContentBulk(getSelectedItemsForActualPrint())} disabled={getSelectedItemsForActualPrint().length === 0}> <Printer className="mr-2 h-4 w-4" /> Chop etish ({getSelectedItemsForActualPrint().length}) </Button> </ShadDialogFooter> </> ) : ( <p className="text-center py-8 text-muted-foreground">Chop etish uchun yaroqli mahsulot topilmadi.</p> )} </ShadDialogContent> </ShadDialog>
       </div>
     </TooltipProvider>
   );
