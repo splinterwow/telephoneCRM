@@ -33,7 +33,7 @@ export type DialogView = "phone" | "accessory";
 type PhoneSubType = "android" | "iphone";
 type IdentifierModeApi = "auto_barcode" | "manual_barcode_unique" | "manual_imei";
 
-interface Product { // ProductsPage bilan bir xil
+interface Product {
   id: number;
   name: string;
   category: number | null;
@@ -50,8 +50,8 @@ interface Product { // ProductsPage bilan bir xil
   purchase_date?: string | null;
   is_active: boolean;
   description?: string | null;
-  supplier_name_manual?: string | null; 
-  supplier_phone_manual?: string | null; 
+  supplier_name_manual?: string | null;
+  supplier_phone_manual?: string | null;
 }
 
 interface FormData {
@@ -70,11 +70,13 @@ interface FormData {
   iphoneBatteryHealth: string;
   iphoneSeriesRegion: string;
   accessoryColor: string;
-  accessoryPriceUzs: string;
-  accessoryPriceUsd: string;
+  accessoryPriceUzs: string; // Sotish narxi
+  accessoryPriceUsd: string; // Sotish narxi
+  accessoryPurchasePriceUzs: string; // Olingan narx
+  accessoryPurchasePriceUsd: string; // Olingan narx
   accessoryDescription: string;
-  supplierNameManual: string; // Mijoz ismi uchun
-  supplierPhoneManual: string; // Mijoz telefoni uchun
+  supplierNameManual: string;
+  supplierPhoneManual: string;
 }
 
 const initialFormData: FormData = {
@@ -95,8 +97,10 @@ const initialFormData: FormData = {
   accessoryColor: "",
   accessoryPriceUzs: "",
   accessoryPriceUsd: "",
+  accessoryPurchasePriceUzs: "", // Yangi
+  accessoryPurchasePriceUsd: "", // Yangi
   accessoryDescription: "",
-  supplierNameManual: "", 
+  supplierNameManual: "",
   supplierPhoneManual: "",
 };
 
@@ -145,13 +149,12 @@ export function AddProductDialog({
   const findCategoryIdFromApi = useCallback(
     (targetCategoryName: string, currentCategoriesFromFunc: ApiCategory[]): string => {
       if (!Array.isArray(currentCategoriesFromFunc) || currentCategoriesFromFunc.length === 0 || !targetCategoryName) {
-        console.warn("[findCategoryIdFromApi] Kategoriya topish uchun yetarli ma'lumot yo'q.");
         return "";
       }
       const targetLower = targetCategoryName.toLowerCase().trim();
       let foundCategory: ApiCategory | undefined = currentCategoriesFromFunc.find(cat => cat.name.toLowerCase().trim() === targetLower);
       
-      if (!foundCategory) { // Agar aniq nom topilmasa, kalit so'zlar bo'yicha qidirish
+      if (!foundCategory) {
         if (targetLower === "iphone") {
           foundCategory = currentCategoriesFromFunc.find(cat => cat.name.toLowerCase().trim().includes("iphone"));
         } else if (targetLower === "android") {
@@ -168,7 +171,6 @@ export function AddProductDialog({
         }
       }
       if (foundCategory) return foundCategory.id.toString();
-      console.warn(`[findCategoryIdFromApi] "${targetCategoryName}" uchun kategoriya topilmadi.`);
       return "";
     },
     []
@@ -181,8 +183,10 @@ export function AddProductDialog({
         purchaseDate: new Date().toISOString().split("T")[0],
         identifierType: initialView === "accessory" ? "auto_barcode" : "auto_barcode",
         initialStockQuantity: initialView === "phone" ? "1" : "0",
-        supplierNameManual: "", // Har ochilganda tozalash
-        supplierPhoneManual: "", // Har ochilganda tozalash
+        supplierNameManual: "", 
+        supplierPhoneManual: "",
+        accessoryPurchasePriceUzs: "", // Reset
+        accessoryPurchasePriceUsd: "", // Reset
       });
       setManualImei("");
       setGeneratedBarcodeForDisplay("");
@@ -279,9 +283,9 @@ export function AddProductDialog({
     if (isLoadingCategories) { toast.info("Kategoriyalar yuklanmoqda, iltimos kuting..."); return; }
     if (!formData.name.trim()) { toast.error("Mahsulot nomi kiritilishi shart."); return; }
     
-    if (initialView === "phone") { // Faqat telefon uchun mijoz ma'lumotlari majburiy
-        if (!formData.supplierNameManual.trim()) { toast.error("Mijoz ismi kiritilishi shart."); return; }
-        if (!formData.supplierPhoneManual.trim()) { toast.error("Mijoz telefon raqami kiritilishi shart."); return; }
+    if (initialView === "phone") {
+        if (!formData.supplierNameManual.trim()) { toast.error("Telefon uchun mijoz ismi kiritilishi shart."); return; }
+        if (!formData.supplierPhoneManual.trim()) { toast.error("Telefon uchun mijoz telefon raqami kiritilishi shart."); return; }
     }
 
     if (initialView === "phone" && (formData.identifierType === "manual_imei" || formData.identifierType === "manual_barcode_unique") && !manualImei.trim()) {
@@ -321,8 +325,8 @@ export function AddProductDialog({
       purchase_date: formData.purchaseDate || null,
       is_active: true,
       add_to_stock_quantity: finalStockQuantityForPayload,
-      supplier_name_manual: initialView === "phone" ? formData.supplierNameManual.trim() : "", 
-      supplier_phone_manual: initialView === "phone" ? formData.supplierPhoneManual.trim() : "",
+      supplier_name_manual: formData.supplierNameManual.trim() || null, 
+      supplier_phone_manual: formData.supplierPhoneManual.trim() || null,
     };
     
     if (initialView === "accessory") {
@@ -359,15 +363,36 @@ export function AddProductDialog({
     if (!hasSellingPrice) {
       toast.error("Kamida bitta sotish narxi (UZS yoki USD) kiritilishi shart."); setIsSubmitting(false); return;
     }
-
-    const purch_uzs_str = formData.phonePurchasePriceUzs;
-    const purch_usd_str = formData.phonePurchasePriceUsd;
-    const purch_uzs = parsePrice(purch_uzs_str);
-    const purch_usd = parsePrice(purch_usd_str);
-
+    
     if (initialView === "phone") {
+      const purch_uzs_str = formData.phonePurchasePriceUzs;
+      const purch_usd_str = formData.phonePurchasePriceUsd;
+      const purch_uzs = parsePrice(purch_uzs_str);
+      const purch_usd = parsePrice(purch_usd_str);
       if (purch_uzs_str.trim() !== "" && !isNaN(purch_uzs) && purch_uzs >= 0) productPayload.purchase_price_uzs = purch_uzs.toFixed(0);
       if (purch_usd_str.trim() !== "" && !isNaN(purch_usd) && purch_usd >= 0) productPayload.purchase_price_usd = purch_usd.toFixed(2);
+    } else if (initialView === "accessory") {
+        const acc_purch_uzs_str = formData.accessoryPurchasePriceUzs;
+        const acc_purch_usd_str = formData.accessoryPurchasePriceUsd;
+        const acc_purch_uzs = parsePrice(acc_purch_uzs_str);
+        const acc_purch_usd = parsePrice(acc_purch_usd_str);
+
+        if (acc_purch_uzs_str.trim() !== "") {
+            if (!isNaN(acc_purch_uzs) && acc_purch_uzs >= 0) {
+                productPayload.purchase_price_uzs = acc_purch_uzs.toFixed(0);
+            } else {
+                toast.error("Aksessuar uchun olingan narx (so'm) noto'g'ri.");
+                setIsSubmitting(false); return;
+            }
+        }
+        if (acc_purch_usd_str.trim() !== "") {
+            if (!isNaN(acc_purch_usd) && acc_purch_usd >= 0) {
+                productPayload.purchase_price_usd = acc_purch_usd.toFixed(2);
+            } else {
+                toast.error("Aksessuar uchun olingan narx (USD) noto'g'ri.");
+                setIsSubmitting(false); return;
+            }
+        }
     }
     
     if (initialView === "phone") {
@@ -385,7 +410,7 @@ export function AddProductDialog({
         }
         if (formData.iphoneSeriesRegion.trim()) productPayload.series_region = formData.iphoneSeriesRegion.trim();
       }
-    } else { 
+    } else { // Aksessuar
       if (formData.accessoryColor.trim()) productPayload.color = formData.accessoryColor.trim();
       if (formData.accessoryDescription.trim()) productPayload.description = formData.accessoryDescription.trim();
     }
@@ -459,21 +484,31 @@ export function AddProductDialog({
        <Input id="name" name="name" value={formData.name} onChange={handleChange} placeholder={initialView === "phone" ? (selectedPhoneSubType === "android" ? "Masalan: Samsung A51 8/128GB Black" : "Masalan: iPhone 14 Pro 256GB Deep Purple") : "Masalan: Chexol iPhone 13 uchun (Shisha)"} disabled={isSubmitting}/>
      </div>
      
-     {initialView === "phone" && ( // Mijoz ma'lumotlari faqat telefon uchun
-       <div className="pt-2 mt-2 border-t">
+     <div className="pt-2 mt-2 border-t">
           <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Mijoz Ma'lumotlari (Kirim uchun)</h3>
          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
              <div className="space-y-1">
-                 <Label htmlFor="supplierNameManual" className="text-xs font-medium">Mijoz Ism Familiyasi <span className="text-destructive">*</span></Label>
-                 <div className="relative"><User className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id="supplierNameManual" name="supplierNameManual" value={formData.supplierNameManual} onChange={handleChange} placeholder="Masalan: Alisher Valiev" className="pl-8" disabled={isSubmitting}/></div>
+                 <Label htmlFor="supplierNameManual" className="text-xs font-medium">
+                    Mijoz Ism Familiyasi {initialView === "phone" && <span className="text-destructive">*</span>}
+                 </Label>
+                 <div className="relative">
+                    <User className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input id="supplierNameManual" name="supplierNameManual" value={formData.supplierNameManual} onChange={handleChange} placeholder="Masalan: Alisher Valiev" className="pl-8" disabled={isSubmitting}/>
+                 </div>
              </div>
              <div className="space-y-1">
-                 <Label htmlFor="supplierPhoneManual" className="text-xs font-medium">Mijoz Telefon Raqami <span className="text-destructive">*</span></Label>
-                  <div className="relative"><Phone className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input id="supplierPhoneManual" name="supplierPhoneManual" type="tel" value={formData.supplierPhoneManual} onChange={handleChange} placeholder="Masalan: +998901234567" className="pl-8" disabled={isSubmitting}/></div>
+                 <Label htmlFor="supplierPhoneManual" className="text-xs font-medium">
+                    Mijoz Telefon Raqami {initialView === "phone" && <span className="text-destructive">*</span>}
+                  </Label>
+                  <div className="relative">
+                    <Phone className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input id="supplierPhoneManual" name="supplierPhoneManual" type="tel" value={formData.supplierPhoneManual} onChange={handleChange} placeholder="Masalan: +998901234567" className="pl-8" disabled={isSubmitting}/>
+                  </div>
              </div>
          </div>
+         {initialView === "accessory" && <p className="text-xs text-muted-foreground mt-1">Aksessuarlar uchun mijoz ma'lumotlari ixtiyoriy.</p>}
        </div>
-     )}
+     
 
      {initialView === "phone" && (formData.identifierType === "manual_imei" || formData.identifierType === "manual_barcode_unique") && (
        <div className="space-y-1">
@@ -566,10 +601,27 @@ export function AddProductDialog({
           )}
           {initialView === "accessory" && (
             <div className="pt-2 mt-2 border-t space-y-3">
-              <h3 className="text-sm font-semibold mb-1 text-muted-foreground">Qo'shimcha Ma'lumotlar (Aksesuar)</h3>
-              <div className="space-y-1"><Label htmlFor="accessoryPriceUzs" className="text-xs">Narxi (so'm) <span className="text-destructive">*</span></Label><Input id="accessoryPriceUzs" name="accessoryPriceUzs" type="text" inputMode="decimal" value={formData.accessoryPriceUzs} onChange={handleChange} placeholder="Masalan: 150000" disabled={isSubmitting || isLoadingCategories || isGeneratingBarcode || isLoadingKassa}/></div>
-              <div className="space-y-1"><Label htmlFor="accessoryPriceUsd" className="text-xs">Narxi (USD) <span className="text-destructive">*</span></Label><Input id="accessoryPriceUsd" name="accessoryPriceUsd" type="text" inputMode="decimal" value={formData.accessoryPriceUsd} onChange={handleChange} placeholder="Masalan: 12.00" disabled={isSubmitting || isLoadingCategories || isGeneratingBarcode || isLoadingKassa}/></div>
-              <p className="text-xs text-muted-foreground mt-1">Narxlardan kamida bittasi (so'm yoki USD) 0 yoki undan katta bo'lishi shart.</p>
+              <h3 className="text-sm font-semibold mb-1 text-muted-foreground">Narxlar va Qo'shimcha Ma'lumotlar (Aksesuar)</h3>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div className="space-y-1">
+                    <Label htmlFor="accessoryPurchasePriceUzs" className="text-xs">Olingan narx (so'm)</Label>
+                    <Input id="accessoryPurchasePriceUzs" name="accessoryPurchasePriceUzs" type="text" inputMode="decimal" value={formData.accessoryPurchasePriceUzs} onChange={handleChange} placeholder="Masalan: 100000" disabled={isSubmitting || isLoadingCategories || isGeneratingBarcode || isLoadingKassa}/>
+                </div>
+                <div className="space-y-1">
+                    <Label htmlFor="accessoryPriceUzs" className="text-xs">Sotiladigan narx (so'm) <span className="text-destructive">*</span></Label>
+                    <Input id="accessoryPriceUzs" name="accessoryPriceUzs" type="text" inputMode="decimal" value={formData.accessoryPriceUzs} onChange={handleChange} placeholder="Masalan: 150000" disabled={isSubmitting || isLoadingCategories || isGeneratingBarcode || isLoadingKassa}/>
+                </div>
+                <div className="space-y-1">
+                    <Label htmlFor="accessoryPurchasePriceUsd" className="text-xs">Olingan narx (USD)</Label>
+                    <Input id="accessoryPurchasePriceUsd" name="accessoryPurchasePriceUsd" type="text" inputMode="decimal" value={formData.accessoryPurchasePriceUsd} onChange={handleChange} placeholder="Masalan: 8.00" disabled={isSubmitting || isLoadingCategories || isGeneratingBarcode || isLoadingKassa}/>
+                </div>
+                <div className="space-y-1">
+                    <Label htmlFor="accessoryPriceUsd" className="text-xs">Sotiladigan narx (USD) <span className="text-destructive">*</span></Label>
+                    <Input id="accessoryPriceUsd" name="accessoryPriceUsd" type="text" inputMode="decimal" value={formData.accessoryPriceUsd} onChange={handleChange} placeholder="Masalan: 12.00" disabled={isSubmitting || isLoadingCategories || isGeneratingBarcode || isLoadingKassa}/>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Sotiladigan narxlardan kamida bittasi (so'm yoki USD) 0 yoki undan katta bo'lishi shart. Olingan narxlar ixtiyoriy.</p>
+              
               <div className="space-y-1"><Label htmlFor="accessoryColor" className="text-xs">Rangi</Label><Input id="accessoryColor" name="accessoryColor" value={formData.accessoryColor} onChange={handleChange} placeholder="Qora, Oq, Pushti" disabled={isSubmitting || isLoadingCategories || isGeneratingBarcode || isLoadingKassa}/></div>
               <div className="space-y-1"><Label htmlFor="accessoryDescription" className="text-xs">Qo'shimcha Izoh</Label><Textarea id="accessoryDescription" name="accessoryDescription" value={formData.accessoryDescription} onChange={handleChange} rows={2} placeholder="Materiali, Brendi, Mosligi va hk." disabled={isSubmitting || isLoadingCategories || isGeneratingBarcode || isLoadingKassa}/></div>
             </div>

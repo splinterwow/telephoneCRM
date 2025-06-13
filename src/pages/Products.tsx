@@ -593,7 +593,7 @@ export default function ProductsPage() {
                 <TableHeader className="sticky top-0 bg-card z-10 shadow-sm">
                   <TableRow>
                     <TableHead className="w-[180px] px-2 py-2.5 sm:px-4">Nomi</TableHead>
-                    <TableHead className="hidden md:table-cell px-2 py-2.5 sm:px-4">Mijoz (Yetkazib beruvchi)</TableHead> 
+                    <TableHead className="hidden md:table-cell px-2 py-2.5 sm:px-4">Mijoz</TableHead> 
                     <TableHead className="hidden xl:table-cell px-2 sm:px-4">Shtrix/IMEI</TableHead>
                     <TableHead className="px-2 sm:px-4">Turi</TableHead>
                     <TableHead className="hidden md:table-cell px-2 sm:px-4">Olingan narx</TableHead>

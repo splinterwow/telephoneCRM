@@ -1,10 +1,23 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
-import { Search, Plus, Trash2, Building } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table";
+import { Search, Plus, Trash2, Building, Loader2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -15,7 +28,6 @@ const INVENTORY_REMOVE_URL = "https://smartphone777.pythonanywhere.com/api/inven
 const PRODUCTS_API_URL = "https://smartphone777.pythonanywhere.com/api/products/";
 const KASSA_API_URL = "https://smartphone777.pythonanywhere.com/api/kassa/";
 
-// Inventory interfeysi
 interface InventoryItem {
   id: number;
   product: { id: number; name: string };
@@ -24,13 +36,12 @@ interface InventoryItem {
   is_low_stock: boolean;
 }
 
-// Mahsulot interfeysi
 interface Product {
   id: number;
   name: string;
+  is_active?: boolean; 
 }
 
-// Kassa interfeysi
 interface Kassa {
   id: number;
   name: string;
@@ -38,14 +49,12 @@ interface Kassa {
   is_active?: boolean;
 }
 
-// Yangi kassa qo'shish uchun forma ma'lumotlari
 interface NewKassaItem {
   name: string;
   location: string;
   is_active: boolean;
 }
 
-// InventoryOperation interfeysi
 interface InventoryOperation {
   id: number;
   product: { id: number; name: string };
@@ -59,7 +68,6 @@ interface InventoryOperation {
   related_operation_id: number | null;
 }
 
-// Yangi mahsulot qo'shish uchun forma ma'lumotlari
 interface NewInventoryItem {
   product_id: number;
   quantity: number;
@@ -67,15 +75,13 @@ interface NewInventoryItem {
   kassa_id: number;
 }
 
-// O'chirish uchun ma'lumotlar
-interface DeleteInventoryItem {
+interface DeleteInventoryItemData {
   product_id: number;
   quantity: number;
   comment: string;
   kassa_id: number;
 }
 
-// O'chirish uchun holat
 interface DeleteState {
   item: InventoryItem | null;
   quantity: number | null;
@@ -89,60 +95,76 @@ interface DeleteState {
 export default function Inventory() {
   const [search, setSearch] = useState("");
   const [inventoryData, setInventoryData] = useState<InventoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  const [overallLoading, setOverallLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [kassaLoading, setKassaLoading] = useState(true);
+
   const [error, setError] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteState, setDeleteState] = useState<DeleteState>({
-    item: null,
-    quantity: null,
-    kassa_id: 0,
-    comment: "",
-    removeAll: false,
-    open: false,
-    operationResult: null,
+    item: null, quantity: null, kassa_id: 0, comment: "",
+    removeAll: false, open: false, operationResult: null,
   });
-  const [productList, setProductList] = useState<Product[]>([]);
+  
+  const [allProductsList, setAllProductsList] = useState<Product[]>([]);
   const [kassaList, setKassaList] = useState<Kassa[]>([]);
+  
   const [newItem, setNewItem] = useState<NewInventoryItem>({
-    product_id: 0,
-    quantity: 1,
-    comment: "",
-    kassa_id: 0,
+    product_id: 0, quantity: 1, comment: "", kassa_id: 0,
   });
 
   const [addKassaModalOpen, setAddKassaModalOpen] = useState(false);
   const [newKassa, setNewKassa] = useState<NewKassaItem>({
-    name: "",
-    location: "",
-    is_active: true,
+    name: "", location: "", is_active: true,
   });
 
-  const getAuthHeaders = () => {
-    let accessToken = localStorage.getItem("accessToken");
+  const getAuthHeaders = useCallback(() => {
+    const accessToken = localStorage.getItem("accessToken");
     if (!accessToken) {
       toast.error("Sessiya topilmadi. Iltimos, tizimga qayta kiring.");
-      window.location.href = "/login";
+      window.location.href = "/login"; 
       throw new Error("Sessiya topilmadi.");
     }
     return {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     };
-  };
+  }, []);
 
-  const fetchInventory = async () => {
+  const fetchAllProducts = useCallback(async () => {
+    setProductsLoading(true);
     try {
       const headers = getAuthHeaders();
-      setLoading(true);
-      setError(null);
+      const response = await fetch(PRODUCTS_API_URL, { method: "GET", headers });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error( errorData.detail || "Barcha mahsulotlar ro'yxatini olishda xato.");
+      }
+      const data = await response.json();
+      setAllProductsList(data.results || []);
+    } catch (err: any) {
+      toast.error(`Mahsulotlarni yuklash xatosi: ${err.message}`);
+      setAllProductsList([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [getAuthHeaders]);
+
+  const fetchInventory = useCallback(async () => {
+    setInventoryLoading(true);
+    try {
+      const headers = getAuthHeaders();
       const response = await fetch(INVENTORY_API_URL, { method: "GET", headers });
       if (!response.ok) {
         if (response.status === 401) throw new Error("Ruxsat berilmagan. Iltimos, tizimga qayta kiring.");
         const errorData = await response.json();
-        throw new Error(errorData.detail || "Ma'lumotlarni olishda xato yuz berdi.");
+        throw new Error(errorData.detail || "Ombor ma'lumotlarini olishda xato yuz berdi.");
       }
       const data = await response.json();
       setInventoryData(data.results || []);
+      setError(null); 
     } catch (err: any) {
       setError(err.message);
       toast.error(err.message);
@@ -150,29 +172,12 @@ export default function Inventory() {
         window.location.href = "/login";
       }
     } finally {
-      setLoading(false);
+      setInventoryLoading(false);
     }
-  };
+  }, [getAuthHeaders]);
 
-  const fetchProducts = async () => {
-    try {
-      const headers = getAuthHeaders();
-      const response = await fetch(PRODUCTS_API_URL, { method: "GET", headers });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Mahsulotlar ro'yxatini olishda xato.");
-      }
-      const data = await response.json();
-      setProductList(data.results || []);
-    } catch (err: any) {
-      toast.error(err.message);
-      if (err.message.includes("Ruxsat berilmagan") || err.message.includes("Sessiya topilmadi")) {
-        window.location.href = "/login";
-      }
-    }
-  };
-
-  const fetchKassa = async () => {
+  const fetchKassa = useCallback(async () => {
+    setKassaLoading(true);
     try {
       const headers = getAuthHeaders();
       const response = await fetch(KASSA_API_URL, { method: "GET", headers });
@@ -183,222 +188,162 @@ export default function Inventory() {
       const data = await response.json();
       setKassaList(data.results || []);
     } catch (err: any) {
-      toast.error(err.message);
-       if (err.message.includes("Ruxsat berilmagan") || err.message.includes("Sessiya topilmadi")) {
-        window.location.href = "/login";
+      toast.error(`Kassalarni yuklashda xato: ${err.message}`);
+      setKassaList([]);
+    } finally {
+      setKassaLoading(false);
+    }
+  }, [getAuthHeaders]);
+
+  useEffect(() => {
+    const initializeData = async () => {
+      setError(null);
+      await Promise.all([
+        fetchAllProducts(),
+        fetchKassa(),
+      ]);
+      await fetchInventory(); 
+    };
+    initializeData();
+  }, [fetchAllProducts, fetchKassa, fetchInventory]);
+  
+  useEffect(() => {
+    if (!productsLoading && !inventoryLoading && !kassaLoading) {
+      setOverallLoading(false);
+    } else {
+      setOverallLoading(true);
+    }
+  }, [productsLoading, inventoryLoading, kassaLoading]);
+
+  useEffect(() => {
+    if (kassaList.length === 1) {
+      const singleKassaId = kassaList[0].id;
+      if (newItem.kassa_id === 0) {
+        setNewItem(prev => ({ ...prev, kassa_id: singleKassaId }));
+      }
+      if (deleteState.open && deleteState.kassa_id === 0) {
+        setDeleteState(prev => ({ ...prev, kassa_id: singleKassaId }));
       }
     }
-  };
+  }, [kassaList, newItem.kassa_id, deleteState.open, deleteState.kassa_id]);
 
   const addInventoryItem = async () => {
-    if (newItem.product_id === 0) {
-      toast.error("Iltimos, mahsulotni tanlang!");
-      return;
-    }
-    if (newItem.kassa_id === 0) {
-      // Agar kassaList bo'sh bo'lsa va newItem.kassa_id hali ham 0 bo'lsa,
-      // bu kassa yo'qligini va qo'shilmaganligini bildiradi.
-      // Yoki, agar bitta kassa bo'lsa, uni avtomatik tanlash mumkin.
-      // Hozircha, kassa tanlanishini talab qilamiz.
-      if (kassaList.length === 0) {
-        toast.error("Avval kassani qo'shing!");
-        return;
-      } else if (kassaList.length === 1 && newItem.kassa_id === 0) {
-        // Agar faqat bitta kassa bo'lsa va foydalanuvchi tanlamagan bo'lsa,
-        // uni avtomatik tanlaymiz.
-        // Bu qismni olib tashlashingiz yoki o'zgartirishingiz mumkin.
-        // Hozircha bu logikani qoldirmaymiz, foydalanuvchi o'zi tanlasin.
-         toast.error("Iltimos, kassani tanlang!");
-         return;
-      } else if (newItem.kassa_id === 0) {
-        toast.error("Iltimos, kassani tanlang!");
-        return;
-      }
-    }
-    if (newItem.quantity <= 0) { 
-      toast.error("Miqdor musbat son bo‘lishi kerak!");
-      return;
-    }
+    if (newItem.product_id === 0) { toast.error("Iltimos, mahsulotni tanlang!"); return; }
+    if (newItem.quantity <= 0) { toast.error("Miqdor musbat son bo‘lishi kerak!"); return; }
+    if (kassaList.length > 0 && newItem.kassa_id === 0) { toast.error("Iltimos, kassani tanlang!"); return; }
+    if (kassaList.length === 0) { toast.error("Tizimda kassa mavjud emas. Avval kassa qo'shing."); return; }
 
     try {
       const headers = getAuthHeaders();
-      const body = { ...newItem };
-      // Agar faqat bitta kassa bo'lsa va newItem.kassa_id 0 bo'lsa (foydalanuvchi tanlamagan bo'lsa),
-      // shu yagona kassaning ID sini avtomatik o'rnatamiz.
-      // Lekin "Kassani tanlang" degan xabar bilan yuqorida buni oldini oldik.
-      // Agar kelajakda avtomatik tanlash kerak bo'lsa, shu yerga logika qo'shiladi.
-      // if (kassaList.length === 1 && body.kassa_id === 0) {
-      //   body.kassa_id = kassaList[0].id;
-      // }
-
-      const response = await fetch(INVENTORY_ADD_URL, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
+      const body = { ...newItem }; 
+      const response = await fetch(INVENTORY_ADD_URL, { method: "POST", headers, body: JSON.stringify(body) });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.detail || "Mahsulot qo'shishda server xatosi.");
       }
-      toast.success("Mahsulot muvaffaqiyatli qo'shildi!");
+      toast.success("Mahsulot omborga muvaffaqiyatli qo'shildi!");
       setAddModalOpen(false);
-      setNewItem({ product_id: 0, quantity: 1, comment: "", kassa_id: kassaList.length === 1 ? kassaList[0].id : 0 });
+      resetNewItemForm();
       fetchInventory();
     } catch (err: any) {
       toast.error(err.message);
-      if (err.message.includes("Ruxsat berilmagan") || err.message.includes("Sessiya topilmadi")) {
-        window.location.href = "/login";
-      }
     }
   };
 
-  const addKassa = async () => {
-    // Qo'shimcha tekshiruv: Agar kassaList allaqachon elementga ega bo'lsa, qo'shishni rad etish
-    if (kassaList.length > 0) {
-      toast.error("Tizimda faqat bitta kassa bo'lishi mumkin. Yangi kassa qo'shib bo'lmaydi.");
-      setAddKassaModalOpen(false); // Modalni yopish
-      setNewKassa({ name: "", location: "", is_active: true }); // Formani tozalash
-      return;
-    }
+  const resetNewItemForm = () => {
+    setNewItem({ product_id: 0, quantity: 1, comment: "", kassa_id: kassaList.length === 1 ? kassaList[0].id : 0 });
+  };
 
-    if (!newKassa.name.trim()) {
-      toast.error("Kassa nomini kiriting!");
-      return;
-    }
+  const addKassa = async () => {
+    if (kassaList.length > 0) { toast.error("Tizimda faqat bitta kassa bo'lishi mumkin."); setAddKassaModalOpen(false); return; }
+    if (!newKassa.name.trim()) { toast.error("Kassa nomini kiriting!"); return; }
     try {
       const headers = getAuthHeaders();
-      const response = await fetch(KASSA_API_URL, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(newKassa),
-      });
+      const response = await fetch(KASSA_API_URL, { method: "POST", headers, body: JSON.stringify(newKassa) });
       if (!response.ok) {
         const errorData = await response.json();
-        let errorMessage = "Kassa qo'shishda server xatosi.";
-        if (errorData && typeof errorData === 'object') {
-            if (errorData.detail) errorMessage = errorData.detail;
-            else if (errorData.name) errorMessage = `Nomi: ${errorData.name.join(', ')}`;
-        }
-        throw new Error(errorMessage);
+        throw new Error(errorData.detail || (errorData.name ? `Nomi: ${errorData.name.join(', ')}` : "Kassa qo'shishda xato."));
       }
       toast.success("Kassa muvaffaqiyatli qo'shildi!");
       setAddKassaModalOpen(false);
       setNewKassa({ name: "", location: "", is_active: true });
-      await fetchKassa(); // Kassani qayta yuklash
-
-      // Yangi kassa qo'shilgandan so'ng, newItem.kassa_id ni avtomatik o'rnatish
-      // (agar mahsulot qo'shish modalida kassa tanlanmagan bo'lsa)
-      // Bu kassaList yangilangandan keyin amalga oshishi kerak
-      // Lekin, kassaList yangilanishi asinxron bo'lgani uchun,
-      // to'g'ridan-to'g'ri yangi kassa ID sini olish qiyinroq.
-      // Eng yaxshisi, foydalanuvchi mahsulot qo'shishda tanlaydi yoki
-      // agar faqat bitta kassa bo'lsa, addInventoryItem ichida uni o'rnatiladi.
-      // Hozircha, newItem.kassa_id ni mahsulot qo'shish modalida tanlashga qoldiramiz.
-
+      await fetchKassa();
     } catch (err: any) {
       toast.error(err.message);
-      if (err.message.includes("Ruxsat berilmagan") || err.message.includes("Sessiya topilmadi")) {
-        window.location.href = "/login";
-      }
     }
   };
 
-  const removeInventoryItem = async (deleteItem: DeleteInventoryItem) => {
+  const removeInventoryItem = async (dataToRemove: DeleteInventoryItemData) => {
+    if (!dataToRemove.product_id) { toast.error("Mahsulot tanlanmagan!"); return; }
+    if (kassaList.length > 0 && dataToRemove.kassa_id === 0) { toast.error("Iltimos, kassani tanlang!"); return; }
+    if (kassaList.length === 0) { toast.error("Tizimda kassa mavjud emas."); return; }
+    if (dataToRemove.quantity <= 0) { toast.error("Kamaytiriladigan miqdor musbat bo‘lishi kerak!"); return; }
+    
+    const currentItemInInventory = inventoryData.find(inv => inv.product.id === dataToRemove.product_id);
+    if (currentItemInInventory && dataToRemove.quantity > currentItemInInventory.quantity) {
+      toast.error("Kamaytiriladigan miqdor joriy zaxiradan ko‘p bo‘lmasligi kerak!"); return;
+    }
+
     try {
       const headers = getAuthHeaders();
-      const response = await fetch(INVENTORY_REMOVE_URL, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          product_id: deleteItem.product_id,
-          quantity: deleteItem.quantity,
-          kassa_id: deleteItem.kassa_id,
-          comment: deleteItem.comment || "",
-        }),
-      });
+      const response = await fetch(INVENTORY_REMOVE_URL, { method: "POST", headers, body: JSON.stringify(dataToRemove) });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || "Mahsulotni o'chirishda server xatosi.");
+        throw new Error(errorData.detail || "Mahsulot miqdorini kamaytirishda xato.");
       }
-      const data = await response.json();
-      setDeleteState((prev) => ({
-        ...prev,
-        open: false,
-        operationResult: data,
-        quantity: null,
-        kassa_id: kassaList.length === 1 ? kassaList[0].id : 0,
-        comment: "",
-        removeAll: false,
+      const operationResultData: InventoryOperation = await response.json();
+      toast.success("Mahsulot miqdori muvaffaqiyatli kamaytirildi!");
+      setDeleteState(prev => ({ 
+          ...prev, open: false, item: null, quantity: null, comment: "", removeAll: false, 
+          kassa_id: kassaList.length === 1 ? kassaList[0].id : 0,
+          operationResult: operationResultData 
       }));
-      toast.success("Mahsulot muvaffaqiyatli o'chirildi!");
       fetchInventory();
-    } catch (err: any)      {
+    } catch (err: any) {
       toast.error(`Xato: ${err.message}.`);
-      if (err.message.includes("Ruxsat berilmagan") || err.message.includes("Sessiya topilmadi")) {
-        window.location.href = "/login";
-      }
     }
   };
 
-  useEffect(() => {
-    const initializeData = async () => {
-      await fetchKassa(); // Avval kassa yuklanadi
-      await fetchInventory();
-      await fetchProducts();
-    };
-    initializeData();
-  }, []);
+  const filteredInventoryDisplayData = inventoryData
+    .filter(invItem => {
+        if (productsLoading && allProductsList.length === 0) return false; // Agar hali yuklanmagan bo'lsa yoki bo'sh bo'lsa, ko'rsatmaymiz
+        // Agar `is_active` ni Products API dan olsak, shuni ham tekshirishimiz mumkin:
+        // const productInList = allProductsList.find(p => p.id === invItem.product.id);
+        // return productInList && productInList.is_active !== false;
+        return allProductsList.some(p => p.id === invItem.product.id);
+    })
+    .filter(item => item.quantity > 0)
+    .filter(item => item.product.name.toLowerCase().includes(search.toLowerCase()));
 
-  // newItem va deleteState uchun kassa_id ni avtomatik sozlash, agar faqat bitta kassa bo'lsa
-  useEffect(() => {
-    if (kassaList.length === 1) {
-      const singleKassaId = kassaList[0].id;
-      setNewItem(prev => ({ ...prev, kassa_id: prev.kassa_id === 0 ? singleKassaId : prev.kassa_id }));
-      setDeleteState(prev => ({ ...prev, kassa_id: prev.kassa_id === 0 ? singleKassaId : prev.kassa_id }));
-    }
-  }, [kassaList]);
-
-
-  const filteredData = inventoryData
-    .filter((item) => item.quantity > 0) 
-    .filter((item) =>
-      item.product.name.toLowerCase().includes(search.toLowerCase())
-    );
+  const productsForAddDropdown = allProductsList.filter(p => {
+    // Agar faqat aktivlarini qo'shish kerak bo'lsa
+    // return p.is_active !== false; 
+    return true; 
+  });
 
   return (
     <div className="space-y-6 p-4 md:p-6 animate-fade-in">
       <div className="flex flex-wrap justify-between items-center gap-4">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-pos-primary to-pos-secondary bg-clip-text text-transparent">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-sky-400 bg-clip-text text-transparent">
           Ombor
         </h1>
         <div className="flex gap-2">
-          {/* Kassa qo'shish tugmasi faqat kassa mavjud bo'lmaganda ko'rsatiladi */}
-          {kassaList.length === 0 && (
+          {kassaList.length === 0 && !kassaLoading && (
             <Button
-              className="flex items-center gap-2 bg-pos-primary text-white hover:bg-pos-secondary"
+              className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700"
               onClick={() => setAddKassaModalOpen(true)}
-            >
-              <Building className="h-4 w-4" />
-              Kassa qo‘shish
-            </Button>
+            > <Building className="h-4 w-4" /> Kassa qo‘shish </Button>
           )}
           <Button
-            className="flex items-center gap-2 bg-pos-primary text-white hover:bg-pos-secondary"
-            onClick={() => {
-              setNewItem({ 
-                product_id: 0, 
-                quantity: 1, 
-                comment: "", 
-                kassa_id: kassaList.length === 1 ? kassaList[0].id : 0 // Agar bitta kassa bo'lsa, avtomatik tanlash
-              });
-              setAddModalOpen(true);
-            }}
-            disabled={kassaList.length === 0} // Agar kassa yo'q bo'lsa, mahsulot qo'shishni bloklash
-            title={kassaList.length === 0 ? "Avval kassa qo'shing" : "Mahsulot qo'shish"}
-          >
-            <Plus className="h-4 w-4" />
-            Mahsulot qo‘shish
-          </Button>
+            className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+            onClick={() => { resetNewItemForm(); setAddModalOpen(true); }}
+            disabled={kassaList.length === 0 || kassaLoading || productsLoading || allProductsList.length === 0}
+            title={
+                kassaList.length === 0 ? "Avval kassa qo'shing" : 
+                productsLoading || allProductsList.length === 0 ? "Mahsulotlar ro'yxati yuklanmoqda yoki bo'sh..." : 
+                "Mahsulot qo'shish"
+            }
+          > <Plus className="h-4 w-4" /> Mahsulot qo‘shish </Button>
         </div>
       </div>
 
@@ -408,81 +353,78 @@ export default function Inventory() {
             placeholder="Mahsulot nomi bo‘yicha qidirish..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
+            className="pl-10 border-gray-300 focus:ring-blue-500 focus:border-blue-500"
           />
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
         </div>
       </div>
 
-      <Card className="bg-pos-background border border-pos-accent shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-pos-primary">Inventar holati</CardTitle>
+      <Card className="border-gray-200 shadow-md">
+        <CardHeader className="bg-gray-50 border-b border-gray-200">
+          <CardTitle className="text-lg text-gray-700">Inventar holati</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="text-pos-primary">Mahsulot</TableHead>
-                <TableHead className="text-pos-primary">Joriy zaxira</TableHead>
-                <TableHead className="text-pos-primary">Minimal zaxira</TableHead>
-                <TableHead className="text-pos-primary">Holati</TableHead>
-                <TableHead className="text-pos-primary">Amallar</TableHead>
+              <TableRow className="bg-gray-100">
+                <TableHead className="text-gray-600 font-semibold">Mahsulot</TableHead>
+                <TableHead className="text-gray-600 font-semibold">Joriy zaxira</TableHead>
+                <TableHead className="text-gray-600 font-semibold">Minimal zaxira</TableHead>
+                <TableHead className="text-gray-600 font-semibold">Holati</TableHead>
+                <TableHead className="text-gray-600 font-semibold text-right">Amallar</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {overallLoading ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-10">
-                    <p className="text-muted-foreground">Yuklanmoqda...</p>
+                    <div className="flex justify-center items-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mr-3" />
+                        <p className="text-gray-500">Ma'lumotlar yuklanmoqda...</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : error ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-10">
-                    <p className="text-red-600">{error}</p>
+                    <p className="text-red-600 font-medium">Xatolik: {error}</p>
+                    <Button onClick={() => {
+                         setOverallLoading(true); setError(null);
+                         Promise.all([fetchAllProducts(), fetchKassa()]).then(() => fetchInventory());
+                    }} variant="outline" size="sm" className="mt-2"> Qayta yuklash </Button>
                   </TableCell>
                 </TableRow>
-              ) : filteredData.length === 0 ? (
+              ) : filteredInventoryDisplayData.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-10">
-                    <p className="text-muted-foreground">Hech qanday ma'lumot topilmadi.</p>
+                    <p className="text-gray-500">
+                        {search ? "Qidiruv bo'yicha omborda mahsulot topilmadi." : 
+                         !productsLoading && allProductsList.length === 0 && !inventoryLoading && inventoryData.length > 0 ? "Ombordagi mahsulotlar umumiy ro'yxatda topilmadi." :
+                         !productsLoading && allProductsList.length === 0 ? "Mahsulotlar ro'yxati bo'sh. Avval mahsulot qo'shing." :
+                         "Omborda mahsulotlar mavjud emas."}
+                    </p>
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredData.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.product.name}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell>{item.minimum_stock_level}</TableCell>
-                    <TableCell
-                      className={
-                        item.is_low_stock ? "text-pos-danger" : "text-green-600"
-                      }
-                    >
-                      {item.is_low_stock ? "Kam zaxira" : "Zaxirada"}
+                filteredInventoryDisplayData.map((item) => (
+                  <TableRow key={item.id} className="hover:bg-gray-50">
+                    <TableCell className="font-medium text-gray-800">{item.product.name}</TableCell>
+                    <TableCell className="text-gray-700">{item.quantity}</TableCell>
+                    <TableCell className="text-gray-700">{item.minimum_stock_level}</TableCell>
+                    <TableCell className={`font-semibold ${item.is_low_stock ? "text-red-600" : "text-green-600"}`}>
+                      {item.is_low_stock ? "Kam qolgan" : "Yetarli"}
                     </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          setDeleteState({
-                            item,
-                            quantity: null,
-                            // Agar faqat bitta kassa bo'lsa, avtomatik tanlash
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon"
+                        onClick={() => setDeleteState({
+                            item, quantity: null, 
                             kassa_id: kassaList.length === 1 ? kassaList[0].id : 0, 
-                            comment: "",
-                            removeAll: false,
-                            open: true,
-                            operationResult: null,
-                          })
-                        }
-                        className="text-red-600 hover:text-red-800"
-                        disabled={kassaList.length === 0} // Agar kassa yo'q bo'lsa, o'chirishni bloklash
-                        title={kassaList.length === 0 ? "Avval kassa qo'shing" : "Mahsulotni o'chirish"}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                            comment: "", removeAll: false, open: true, operationResult: null,
+                        })}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-100"
+                        disabled={kassaList.length === 0 || kassaLoading}
+                        title={kassaList.length === 0 ? "Avval kassa qo'shing" : "Miqdorni kamaytirish"}
+                      > <Trash2 className="h-4 w-4" /> </Button>
                     </TableCell>
                   </TableRow>
                 ))
@@ -492,360 +434,189 @@ export default function Inventory() {
         </CardContent>
       </Card>
 
-      {/* Mahsulot qo'shish modal */}
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
-        <DialogContent className="sm:max-w-[400px] max-h-[80vh] overflow-y-auto hide-scrollbar bg-pos-background border border-pos-accent animate-scale-in">
-          <DialogHeader>
-            <DialogTitle className="text-pos-primary">Yangi mahsulot qo‘shish</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Mahsulot:</span>
-              <select
-                value={newItem.product_id}
-                onChange={(e) =>
-                  setNewItem({ ...newItem, product_id: parseInt(e.target.value) || 0 })
-                }
-                className="w-full p-2 border border-pos-accent bg-pos-background rounded focus:ring-2 focus:ring-pos-primary"
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader> <DialogTitle className="text-xl text-gray-800">Omborga Mahsulot Qo‘shish</DialogTitle> </DialogHeader>
+          <div className="grid gap-5 py-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="product_id_add" className="font-medium text-gray-700">Mahsulot:</Label>
+              <select id="product_id_add" value={newItem.product_id}
+                onChange={(e) => setNewItem({ ...newItem, product_id: parseInt(e.target.value) || 0 })}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={productsLoading || productsForAddDropdown.length === 0}
               >
-                <option value={0}>Mahsulotni tanlang</option>
-                {productList.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
-                  </option>
-                ))}
+                <option value={0} disabled>
+                    {productsLoading ? "Mahsulotlar yuklanmoqda..." : productsForAddDropdown.length === 0 ? "Qo'shish uchun mahsulot yo'q" : "Mahsulotni tanlang..."}
+                </option>
+                {productsForAddDropdown.map((product) => ( <option key={product.id} value={product.id}> {product.name} </option> ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Miqdor:</span>
-              <Input
-                type="number"
-                min="1" // Minimal miqdor 1 bo'lishi kerak
-                value={newItem.quantity === 0 ? "" : newItem.quantity} // 0 ni bo'sh satr sifatida ko'rsatish
+            <div className="space-y-1.5">
+              <Label htmlFor="quantity_add" className="font-medium text-gray-700">Miqdor:</Label>
+              <Input id="quantity_add" type="number" min="1"
+                value={newItem.quantity === 0 ? "" : newItem.quantity.toString()}
                 onChange={(e) => {
-                  const valueString = e.target.value;
-                  let updatedQuantity = newItem.quantity; 
-
-                  if (valueString === "") {
-                    updatedQuantity = 0; // Agar bo'sh bo'lsa 0
-                  } else {
-                    const parsedNum = Number(valueString);
-                    if (!isNaN(parsedNum) && parsedNum >= 0) {
-                      updatedQuantity = parsedNum;
-                    }
-                  }
-                  setNewItem({ ...newItem, quantity: updatedQuantity });
+                  const val = e.target.value;
+                  setNewItem(prev => ({ ...prev, quantity: val === "" ? 0 : (parseInt(val) >= 1 ? parseInt(val) : 1) }));
                 }}
-                placeholder="Miqdor"
-                className="border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
+                placeholder="Miqdorni kiriting" className="border-gray-300 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Izoh:</span>
-              <Input
-                type="text"
-                value={newItem.comment}
-                onChange={(e) =>
-                  setNewItem({ ...newItem, comment: e.target.value })
-                }
-                placeholder="Izoh (ixtiyoriy)"
-                className="border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
-              />
-            </div>
-            {/* Kassa tanlash inputi, agar bir nechta kassa bo'lsa ko'rsatiladi */}
             {kassaList.length > 1 && (
-                <div className="grid grid-cols-2 items-center gap-4">
-                <span className="font-bold text-pos-primary">Kassa:</span>
-                <select
-                    value={newItem.kassa_id}
-                    onChange={(e) =>
-                    setNewItem({ ...newItem, kassa_id: parseInt(e.target.value) || 0 })
-                    }
-                    className="w-full p-2 border border-pos-accent bg-pos-background rounded focus:ring-2 focus:ring-pos-primary"
-                >
-                    <option value={0}>Kassani tanlang</option>
-                    {kassaList.map((kassa) => (
-                    <option key={kassa.id} value={kassa.id}>
-                        {kassa.name}
-                    </option>
-                    ))}
-                </select>
-                </div>
+                <div className="space-y-1.5">
+                <Label htmlFor="kassa_id_add" className="font-medium text-gray-700">Kassa:</Label>
+                <select id="kassa_id_add" value={newItem.kassa_id}
+                    onChange={(e) => setNewItem({ ...newItem, kassa_id: parseInt(e.target.value) || 0 })}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    disabled={kassaLoading}
+                > <option value={0} disabled>{kassaLoading ? "Yuklanmoqda..." : "Kassani tanlang..."}</option>
+                    {kassaList.map((kassa) => ( <option key={kassa.id} value={kassa.id}>{kassa.name}</option> ))}
+                </select></div>
             )}
-            {/* Agar faqat bitta kassa bo'lsa, uni ko'rsatish (tanlash imkoniyatisiz) */}
-            {kassaList.length === 1 && (
-                 <div className="grid grid-cols-2 items-center gap-4">
-                    <span className="font-bold text-pos-primary">Kassa:</span>
-                    <span>{kassaList[0].name}</span>
+             {kassaList.length === 1 && !kassaLoading && (
+                 <div className="space-y-1.5">
+                    <Label className="font-medium text-gray-700">Kassa:</Label>
+                    <p className="p-2 border border-gray-300 rounded-md bg-gray-50">{kassaList[0].name}</p>
                  </div>
             )}
+             {kassaLoading && kassaList.length === 0 && ( // Agar kassa yuklanayotgan bo'lsa
+                 <div className="space-y-1.5">
+                    <Label className="font-medium text-gray-700">Kassa:</Label>
+                    <p className="p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500">Kassalar yuklanmoqda...</p>
+                 </div>
+             )}
+            <div className="space-y-1.5">
+              <Label htmlFor="comment_add" className="font-medium text-gray-700">Izoh (ixtiyoriy):</Label>
+              <Input id="comment_add" type="text" value={newItem.comment}
+                onChange={(e) => setNewItem({ ...newItem, comment: e.target.value })}
+                placeholder="Qo'shimcha ma'lumot" className="border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAddModalOpen(false);
-                setNewItem({ 
-                    product_id: 0, 
-                    quantity: 1, 
-                    comment: "", 
-                    kassa_id: kassaList.length === 1 ? kassaList[0].id : 0 
-                });
-              }}
-              className="bg-pos-accent text-white hover:bg-pos-secondary"
-            >
-              Bekor qilish
-            </Button>
-            <Button
-              onClick={addInventoryItem}
-              className="bg-pos-primary text-white hover:bg-pos-secondary"
-            >
-              Saqlash
-            </Button>
+            <Button variant="outline" onClick={() => { setAddModalOpen(false); resetNewItemForm(); }}> Bekor qilish </Button>
+            <Button onClick={addInventoryItem} className="bg-green-600 hover:bg-green-700 text-white"
+              disabled={newItem.product_id === 0 || newItem.quantity <= 0 || (kassaList.length > 0 && newItem.kassa_id === 0) || productsLoading || kassaLoading }
+            > Saqlash </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Kassa qo'shish modal */}
       <Dialog open={addKassaModalOpen} onOpenChange={setAddKassaModalOpen}>
-        <DialogContent className="sm:max-w-[400px] max-h-[80vh] overflow-y-auto hide-scrollbar bg-pos-background border border-pos-accent animate-scale-in">
-          <DialogHeader>
-            <DialogTitle className="text-pos-primary">Yangi kassa qo‘shish</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="kassa-name" className="text-right col-span-1 font-bold text-pos-primary">
-                Nomi:
-              </Label>
-              <Input
-                id="kassa-name"
-                value={newKassa.name}
-                onChange={(e) => setNewKassa({ ...newKassa, name: e.target.value })}
-                placeholder="Kassa nomi"
-                className="col-span-3 border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
-              />
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader> <DialogTitle className="text-xl text-gray-800">Yangi Kassa Qo‘shish</DialogTitle> </DialogHeader>
+          <div className="grid gap-5 py-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="kassa-name" className="font-medium text-gray-700">Nomi:</Label>
+              <Input id="kassa-name" value={newKassa.name} onChange={(e) => setNewKassa({ ...newKassa, name: e.target.value })} placeholder="Kassa nomi" className="border-gray-300 focus:ring-blue-500 focus:border-blue-500" />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="kassa-location" className="text-right col-span-1 font-bold text-pos-primary">
-                Joylashuvi:
-              </Label>
-              <Input
-                id="kassa-location"
-                value={newKassa.location}
-                onChange={(e) => setNewKassa({ ...newKassa, location: e.target.value })}
-                placeholder="Joylashuvi (ixtiyoriy)"
-                className="col-span-3 border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
-              />
+            <div className="space-y-1.5">
+              <Label htmlFor="kassa-location" className="font-medium text-gray-700">Joylashuvi (ixtiyoriy):</Label>
+              <Input id="kassa-location" value={newKassa.location} onChange={(e) => setNewKassa({ ...newKassa, location: e.target.value })} placeholder="Joylashuvi" className="border-gray-300 focus:ring-blue-500 focus:border-blue-500" />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-               <Label htmlFor="kassa-active" className="text-right col-span-1 font-bold text-pos-primary">
-                Aktiv:
-              </Label>
-              <Checkbox
-                id="kassa-active"
-                checked={newKassa.is_active}
-                onCheckedChange={(checked) => setNewKassa({ ...newKassa, is_active: !!checked })}
-                className="col-span-3 justify-self-start"
-              />
+            <div className="flex items-center space-x-2 pt-2">
+              <Checkbox id="kassa-active" checked={newKassa.is_active} onCheckedChange={(checked) => setNewKassa({ ...newKassa, is_active: !!checked })} />
+              <Label htmlFor="kassa-active" className="font-medium text-gray-700 cursor-pointer">Aktiv</Label>
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAddKassaModalOpen(false);
-                setNewKassa({ name: "", location: "", is_active: true });
-              }}
-              className="bg-pos-accent text-white hover:bg-pos-secondary"
-            >
-              Bekor qilish
-            </Button>
-            <Button
-              onClick={addKassa}
-              className="bg-pos-primary text-white hover:bg-pos-secondary"
-            >
-              Saqlash
-            </Button>
+            <Button variant="outline" onClick={() => { setAddKassaModalOpen(false); setNewKassa({ name: "", location: "", is_active: true }); }}>Bekor qilish</Button>
+            <Button onClick={addKassa} className="bg-blue-600 hover:bg-blue-700 text-white" disabled={!newKassa.name.trim()}>Saqlash</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* O'chirish tasdiqlash modal */}
-      <Dialog
-        open={deleteState.open}
-        onOpenChange={() =>
-          setDeleteState({
-            ...deleteState,
-            open: false,
-            item: null,
-            quantity: null,
-            kassa_id: kassaList.length === 1 ? kassaList[0].id : 0,
-            comment: "",
-            removeAll: false,
-            operationResult: null,
-          })
-        }
-      >
-        <DialogContent className="sm:max-w-[400px] max-h-[80vh] overflow-y-auto hide-scrollbar bg-pos-background border border-pos-accent animate-scale-in">
-          <DialogHeader>
-            <DialogTitle className="text-pos-primary">Mahsulotni o‘chirish</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Mahsulot:</span>
-              <span>{deleteState.item?.product.name || "Tanlanmagan"}</span>
-            </div>
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Joriy zaxira:</span>
-              <span>{deleteState.item?.quantity || 0}</span>
-            </div>
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">O‘chiriladigan miqdor:</span>
-              <Input
-                type="number"
-                min="1" // Minimal miqdor 1
-                value={deleteState.quantity === null || deleteState.quantity === 0 ? "" : deleteState.quantity}
-                onChange={(e) => {
-                  const valueString = e.target.value;
-                  let newQuantity: number | null;
-                   if (valueString === "") {
-                    newQuantity = null; 
-                  } else {
-                    const parsedNum = Number(valueString);
-                    if(!isNaN(parsedNum) && parsedNum >=0){
-                        newQuantity = parsedNum;
-                    } else {
-                        newQuantity = deleteState.quantity;
-                    }
-                  }
-                  setDeleteState({
-                    ...deleteState,
-                    quantity: newQuantity,
-                    removeAll: newQuantity !== null && deleteState.item !== null && newQuantity === deleteState.item.quantity,
-                  });
-                }}
-                placeholder="Miqdor"
-                className="border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
-              />
-            </div>
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Hammasini o‘chirish:</span>
-              <Checkbox
-                checked={deleteState.removeAll}
-                onCheckedChange={(checked) =>
-                  setDeleteState({
-                    ...deleteState,
-                    removeAll: !!checked,
-                    quantity: checked && deleteState.item ? deleteState.item.quantity : (deleteState.quantity === 0 ? null : deleteState.quantity),
-                  })
-                }
-              />
-            </div>
-             {/* Kassa tanlash inputi, agar bir nechta kassa bo'lsa ko'rsatiladi */}
-            {kassaList.length > 1 && (
-                <div className="grid grid-cols-2 items-center gap-4">
-                <span className="font-bold text-pos-primary">Kassa:</span>
-                <select
-                    value={deleteState.kassa_id}
-                    onChange={(e) =>
-                    setDeleteState({ ...deleteState, kassa_id: parseInt(e.target.value) || 0 })
-                    }
-                    className="w-full p-2 border border-pos-accent bg-pos-background rounded focus:ring-2 focus:ring-pos-primary"
-                >
-                    <option value={0}>Kassani tanlang</option>
-                    {kassaList.map((kassa) => (
-                    <option key={kassa.id} value={kassa.id}>
-                        {kassa.name}
-                    </option>
-                    ))}
-                </select>
+      <Dialog open={deleteState.open} onOpenChange={(isOpen) => setDeleteState(prev => ({ ...prev, open: isOpen, operationResult: isOpen ? prev.operationResult : null }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader> <DialogTitle className="text-xl text-gray-800">Miqdorni Kamaytirish</DialogTitle> </DialogHeader>
+          {deleteState.item && (
+            <div className="grid gap-5 py-4">
+                <div>
+                <p className="text-sm text-gray-600">Mahsulot: <span className="font-semibold text-gray-800">{deleteState.item.product.name}</span></p>
+                <p className="text-sm text-gray-600">Joriy zaxira: <span className="font-semibold text-gray-800">{deleteState.item.quantity}</span></p>
                 </div>
-            )}
-            {/* Agar faqat bitta kassa bo'lsa, uni ko'rsatish (tanlash imkoniyatisiz) */}
-            {kassaList.length === 1 && (
-                 <div className="grid grid-cols-2 items-center gap-4">
-                    <span className="font-bold text-pos-primary">Kassa:</span>
-                    <span>{kassaList[0].name}</span>
-                 </div>
-            )}
-            <div className="grid grid-cols-2 items-center gap-4">
-              <span className="font-bold text-pos-primary">Izoh:</span>
-              <Input
-                type="text"
-                value={deleteState.comment}
-                onChange={(e) =>
-                  setDeleteState({ ...deleteState, comment: e.target.value })
-                }
-                placeholder="Izoh (ixtiyoriy)"
-                className="border border-pos-accent bg-pos-background focus:ring-2 focus:ring-pos-primary"
-              />
+                <div className="space-y-1.5">
+                    <Label htmlFor="quantity_delete" className="font-medium text-gray-700">Kamaytiriladigan miqdor:</Label>
+                    <Input id="quantity_delete" type="number" min="1"
+                        value={deleteState.quantity === null || deleteState.quantity === 0 ? "" : deleteState.quantity.toString()}
+                        onChange={(e) => {
+                        const val = e.target.value; let newQuantity: number | null;
+                        if (val === "") newQuantity = null; 
+                        else { const pNum = parseInt(val); newQuantity = (!isNaN(pNum) && pNum >=0) ? pNum : deleteState.quantity; }
+                        setDeleteState(prev => ({ ...prev, quantity: newQuantity, removeAll: newQuantity !== null && prev.item !== null && newQuantity === prev.item.quantity }));
+                        }}
+                        placeholder="Miqdorni kiriting" className="border-gray-300 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+                <div className="flex items-center space-x-2">
+                <Checkbox id="removeAll" checked={deleteState.removeAll}
+                    onCheckedChange={(checked) =>
+                    setDeleteState(prev => ({ ...prev, removeAll: !!checked, quantity: (checked && prev.item) ? prev.item.quantity : (prev.quantity === 0 ? null : prev.quantity) }))
+                    }
+                />
+                <Label htmlFor="removeAll" className="font-medium text-gray-700 cursor-pointer">Hammasini kamaytirish</Label>
+                </div>
+                {kassaList.length > 1 && (
+                    <div className="space-y-1.5">
+                    <Label htmlFor="kassa_id_delete" className="font-medium text-gray-700">Kassa:</Label>
+                    <select id="kassa_id_delete" value={deleteState.kassa_id}
+                        onChange={(e) => setDeleteState(prev => ({ ...prev, kassa_id: parseInt(e.target.value) || 0 })) }
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                         disabled={kassaLoading}
+                    > <option value={0} disabled>{kassaLoading ? "Yuklanmoqda..." : "Kassani tanlang..."}</option>
+                        {kassaList.map((kassa) => ( <option key={kassa.id} value={kassa.id}>{kassa.name}</option> ))}
+                    </select></div>
+                )}
+                {kassaList.length === 1 && !kassaLoading && (
+                    <div className="space-y-1.5">
+                        <Label className="font-medium text-gray-700">Kassa:</Label>
+                        <p className="p-2 border border-gray-300 rounded-md bg-gray-50">{kassaList[0].name}</p>
+                    </div>
+                )}
+                {kassaLoading && kassaList.length === 0 && (
+                     <div className="space-y-1.5">
+                        <Label className="font-medium text-gray-700">Kassa:</Label>
+                        <p className="p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500">Kassalar yuklanmoqda...</p>
+                     </div>
+                 )}
+                <div className="space-y-1.5">
+                <Label htmlFor="comment_delete" className="font-medium text-gray-700">Izoh (ixtiyoriy):</Label>
+                <Input id="comment_delete" type="text" value={deleteState.comment} onChange={(e) => setDeleteState(prev => ({ ...prev, comment: e.target.value }))} placeholder="Sababi yoki qo'shimcha ma'lumot" className="border-gray-300 focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() =>
-                setDeleteState({
-                  ...deleteState,
-                  open: false,
-                  item: null,
-                  quantity: null,
-                  kassa_id: kassaList.length === 1 ? kassaList[0].id : 0,
-                  comment: "",
-                  removeAll: false,
-                  operationResult: null,
-                })
-              }
-              className="bg-pos-accent text-white hover:bg-pos-secondary"
-            >
-              Bekor qilish
-            </Button>
-            <Button
-              onClick={() => {
-                if (!deleteState.item) {
-                  toast.error("Mahsulot tanlanmagan!");
-                  return;
-                }
-                if (deleteState.kassa_id === 0 && kassaList.length > 0) { // Agar kassalar bo'lsa, lekin tanlanmagan bo'lsa
-                    toast.error("Iltimos, kassani tanlang!");
-                    return;
-                } else if (kassaList.length === 0) { // Agar umuman kassa yo'q bo'lsa
-                    toast.error("Tizimda kassa mavjud emas. Avval kassa qo'shing.");
-                    return;
-                }
-                if (deleteState.quantity === null || deleteState.quantity <= 0) {
-                  toast.error("Miqdor musbat son bo‘lishi kerak!");
-                  return;
-                }
-                if (deleteState.quantity > (deleteState.item?.quantity || 0)) {
-                  toast.error("O‘chiriladigan miqdor joriy zaxiradan ko‘p bo‘lmasligi kerak!");
-                  return;
-                }
-
-                removeInventoryItem({
-                  product_id: deleteState.item.product.id,
-                  quantity: deleteState.quantity,
-                  // Agar faqat bitta kassa bo'lsa va deleteState.kassa_id 0 bo'lsa, o'sha yagona kassani ishlatamiz
-                  kassa_id: deleteState.kassa_id === 0 && kassaList.length === 1 ? kassaList[0].id : deleteState.kassa_id,
-                  comment: deleteState.comment || "",
-                });
-              }}
-              className="bg-red-600 text-white hover:bg-red-800"
-            >
-              O‘chirish
-            </Button>
-          </DialogFooter>
+          )}
           {deleteState.operationResult && (
-            <div className="mt-4 p-4 bg-green-100 border border-green-400 rounded">
-              <h4 className="font-bold text-green-800">Amaliyot muvaffaqiyatli!</h4>
+             <div className="mt-4 p-3 bg-green-50 border border-green-300 rounded-md text-sm">
+              <h4 className="font-semibold text-green-700">Amaliyot Muvaffaqiyatli!</h4>
               <p><strong>ID:</strong> {deleteState.operationResult.id}</p>
               <p><strong>Mahsulot:</strong> {deleteState.operationResult.product.name}</p>
+              <p><strong>Kamaytirilgan miqdor:</strong> {deleteState.operationResult.quantity}</p>
               <p><strong>Kassa:</strong> {deleteState.operationResult.kassa.name}</p>
-              <p><strong>Miqdor:</strong> {deleteState.operationResult.quantity}</p>
-              <p><strong>Izoh:</strong> {deleteState.operationResult.comment}</p>
+              {deleteState.operationResult.comment && <p><strong>Izoh:</strong> {deleteState.operationResult.comment}</p>}
               <p><strong>Sana:</strong> {new Date(deleteState.operationResult.timestamp).toLocaleString()}</p>
             </div>
           )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteState(prev => ({ ...prev, open: false, item: null, quantity: null, kassa_id: kassaList.length === 1 ? kassaList[0].id : 0, comment: "", removeAll: false, operationResult: null }))}>
+              Bekor qilish
+            </Button>
+            <Button
+              onClick={() => {
+                if (deleteState.item) {
+                    removeInventoryItem({ 
+                        product_id: deleteState.item.product.id, 
+                        quantity: deleteState.quantity || 0,
+                        kassa_id: deleteState.kassa_id, 
+                        comment: deleteState.comment 
+                    });
+                }
+              }}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={!deleteState.item || deleteState.quantity === null || deleteState.quantity <= 0 || (kassaList.length > 0 && deleteState.kassa_id === 0) || kassaLoading }
+            >
+              Kamaytirish
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
