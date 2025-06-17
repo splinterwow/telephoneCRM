@@ -62,11 +62,11 @@ interface FormItem extends Omit<PurchaseOrderItem, 'id'> {
 // Modal uchun ma'lumotlar strukturasi (items alohida)
 interface ModalEntryData extends Omit<PurchaseEntry, 'id' | 'items'> {}
 
-const LOCAL_STORAGE_MODAL_ENTRY_KEY = 'newPurchaseEntryData_modal_v2'; // Kalitlarni yangilash mumkin
+const LOCAL_STORAGE_MODAL_ENTRY_KEY = 'newPurchaseEntryData_modal_v2';
 const LOCAL_STORAGE_MODAL_ITEMS_KEY = 'newPurchaseFormItems_modal_v2';
 const LOCAL_STORAGE_ALL_ENTRIES_KEY = 'allPurchaseEntries_v2';
 
-function DaftarPage() { 
+function DaftarPage() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [allEntries, setAllEntries] = useState<PurchaseEntry[]>([]);
   const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
@@ -87,9 +87,9 @@ function DaftarPage() {
 
   const getInitialModalFormItems = (): FormItem[] => {
     const saved = localStorage.getItem(LOCAL_STORAGE_MODAL_ITEMS_KEY);
-    const defaultItems: FormItem[] = [{ 
-        tempId: uuidv4(), product_name: '', quantity_ordered: 1, 
-        purchase_price_currency: '', custom_kassa_name: '', payment_status_custom: '' 
+    const defaultItems: FormItem[] = [{
+        tempId: uuidv4(), product_name: '', quantity_ordered: 1,
+        purchase_price_currency: '', custom_kassa_name: '', payment_status_custom: ''
     }];
     if (saved) {
       try {
@@ -99,7 +99,7 @@ function DaftarPage() {
     }
     return defaultItems;
   };
-  
+
   const [currentModalEntryData, setCurrentModalEntryData] = useState<ModalEntryData>(getInitialModalEntryData);
   const [currentModalFormItems, setCurrentModalFormItems] = useState<FormItem[]>(getInitialModalFormItems);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,8 +135,8 @@ function DaftarPage() {
   }, [currentModalFormItems, isFormModalOpen]);
 
   const handleAddItem = () => {
-    setCurrentModalFormItems(prev => [...prev, { 
-        tempId: uuidv4(), product_name: '', quantity_ordered: 1, 
+    setCurrentModalFormItems(prev => [...prev, {
+        tempId: uuidv4(), product_name: '', quantity_ordered: 1,
         purchase_price_currency: '', custom_kassa_name: '', payment_status_custom: '',
     }]);
   };
@@ -153,10 +153,10 @@ function DaftarPage() {
         if (item.tempId === tempId) {
           let processedValue: string | number | null = value;
           if (field === 'quantity_ordered') {
-            if (value === '') { processedValue = 0; } 
+            if (value === '') { processedValue = 0; }
             else { const num = parseFloat(value); processedValue = (!isNaN(num) && num >= 0) ? num : 0; }
           } else if (field === 'purchase_price_currency') {
-             if (value === '') { processedValue = ''; } 
+             if (value === '') { processedValue = ''; }
              else { const num = parseFloat(value); processedValue = (!isNaN(num) && num >= 0) ? num.toString() : ''; }
           } else if (field === 'custom_kassa_name' || field === 'payment_status_custom') {
             processedValue = value.trim() === '' ? null : value;
@@ -167,12 +167,11 @@ function DaftarPage() {
       })
     );
   };
-  
+
   const handleMainFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    // Raqamli maydonlar uchun qo'shimcha tekshiruv
     if (name === "total_amount" || name === "amount_paid") {
-        const numValue = value.replace(/[^0-9.]/g, ''); // Faqat raqamlar va nuqta
+        const numValue = value.replace(/[^0-9.]/g, '');
         setCurrentModalEntryData(prev => ({ ...prev, [name]: numValue }));
     } else {
         setCurrentModalEntryData(prev => ({ ...prev, [name]: value }));
@@ -189,14 +188,14 @@ function DaftarPage() {
       order_date: new Date().toISOString().slice(0, 16),
       total_amount: '', amount_paid: '', due_date_for_remaining: '', notes: '',
     };
-    const defaultFormItems: FormItem[] = [{ 
-        tempId: uuidv4(), product_name: '', quantity_ordered: 1, 
+    const defaultFormItems: FormItem[] = [{
+        tempId: uuidv4(), product_name: '', quantity_ordered: 1,
         purchase_price_currency: '', custom_kassa_name: '', payment_status_custom: '',
     }];
 
     setCurrentModalEntryData(defaultEntryData);
     setCurrentModalFormItems(defaultFormItems);
-    
+
     if (clearModalLocalStorage) {
       localStorage.removeItem(LOCAL_STORAGE_MODAL_ENTRY_KEY);
       localStorage.removeItem(LOCAL_STORAGE_MODAL_ITEMS_KEY);
@@ -211,27 +210,11 @@ function DaftarPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    if (!currentModalEntryData.source_details?.trim()) {
-        toast.error('Kimdan/Qayerdan (Manba) kiritilishi shart.');
-        setIsSubmitting(false); return;
-    }
-    // Umumiy summa va To'langan summa kabi asosiy maydonlar uchun validatsiya qo'shish mumkin
-    if (!currentModalEntryData.total_amount?.trim()) {
-        toast.error('Umumiy summa kiritilishi shart.');
-        setIsSubmitting(false); return;
-    }
-
-    if (currentModalFormItems.some(item => 
-        !item.product_name.trim() || item.quantity_ordered <= 0 ||
-        !item.purchase_price_currency.toString().trim()
-    )) {
-      toast.error("Barcha qatorlar uchun 'Nomi', Miqdor (>0) va Narx to'g'ri to'ldirilishi shart.");
-      setIsSubmitting(false); return;
-    }
+    // Barcha validatsiyalar olib tashlandi
 
     const newEntry: PurchaseEntry = {
       id: uuidv4(),
-      source_details: currentModalEntryData.source_details!.trim(),
+      source_details: currentModalEntryData.source_details?.trim() || '',
       source_phone: currentModalEntryData.source_phone?.trim() || null,
       order_date: currentModalEntryData.order_date ? new Date(currentModalEntryData.order_date).toISOString() : new Date().toISOString(),
       currency: currentModalEntryData.currency || 'UZS',
@@ -239,18 +222,18 @@ function DaftarPage() {
       amount_paid: currentModalEntryData.amount_paid?.trim() || null,
       due_date_for_remaining: currentModalEntryData.due_date_for_remaining?.trim() || null,
       notes: currentModalEntryData.notes?.trim() || null,
-      items: currentModalFormItems.map(({ tempId, ...itemData }) => ({
-        id: uuidv4(), ...itemData,
-        product_name: itemData.product_name.trim(),
-        purchase_price_currency: itemData.purchase_price_currency.toString(),
-        quantity_ordered: Number(itemData.quantity_ordered),
-        custom_kassa_name: itemData.custom_kassa_name?.trim() || null,
-        payment_status_custom: itemData.payment_status_custom?.trim() || null,
+      items: currentModalFormItems.map(item => ({
+        id: uuidv4(),
+        product_name: item.product_name.trim(),
+        quantity_ordered: item.quantity_ordered,
+        purchase_price_currency: item.purchase_price_currency,
+        custom_kassa_name: item.custom_kassa_name,
+        payment_status_custom: item.payment_status_custom,
       })),
     };
-    
+
     setAllEntries(prevEntries => [newEntry, ...prevEntries]);
-    
+
     toast.success("Yangi kirim yozuvi lokal saqlandi!");
     setIsFormModalOpen(false);
     resetModalFormAndState(true);
@@ -312,7 +295,7 @@ function DaftarPage() {
                     <TableHead>To'langan</TableHead>
                     <TableHead>Qoldiq To'lash Sanasi</TableHead>
                     <TableHead>Izohlar</TableHead>
-                    <TableHead>Mahsulotlar</TableHead> {/* Mahsulotlar uchun yangi ustun */}
+                    <TableHead>Mahsulotlar</TableHead>
                     <TableHead>Sana</TableHead>
                     <TableHead className="text-right">Amallar</TableHead>
                   </TableRow>
@@ -320,16 +303,16 @@ function DaftarPage() {
                 <TableBody>
                   {allEntries.map((entry) => (
                     <TableRow key={entry.id}>
-                      <TableCell className="font-medium">{entry.source_details}</TableCell>
+                      <TableCell className="font-medium">{entry.source_details || '-'}</TableCell>
                       <TableCell>{entry.total_amount || '-'} {entry.currency}</TableCell>
                       <TableCell>{entry.amount_paid || '-'}{entry.amount_paid ? ` ${entry.currency}` : ''}</TableCell>
                       <TableCell>{entry.due_date_for_remaining ? new Date(entry.due_date_for_remaining).toLocaleDateString('uz-Latn-UZ') : '-'}</TableCell>
                       <TableCell className="max-w-[200px] truncate" title={entry.notes || undefined}>{entry.notes || '-'}</TableCell>
                       <TableCell>
                         <ul className="list-disc list-inside max-w-[250px]">
-                            {entry.items.slice(0, 2).map(item => ( // Faqat birinchi 2 tasini ko'rsatish
-                                <li key={item.id} className="truncate" title={`${item.product_name} (${item.quantity_ordered} x ${item.purchase_price_currency}) - ${item.payment_status_custom || 'N/A'}`}>
-                                    {item.product_name} ({item.quantity_ordered} dona)
+                            {entry.items.slice(0, 2).map(item => (
+                                <li key={item.id} className="truncate" title={`${item.product_name || 'Nomsiz'} (${item.quantity_ordered} x ${item.purchase_price_currency || '0'}) - ${item.payment_status_custom || 'N/A'}`}>
+                                    {item.product_name || 'Nomsiz'} ({item.quantity_ordered} dona)
                                 </li>
                             ))}
                             {entry.items.length > 2 && <li>... va yana {entry.items.length - 2} ta</li>}
@@ -337,8 +320,8 @@ function DaftarPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{formatDateForDisplay(entry.order_date)}</TableCell>
                       <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" size="icon" title="O'chirish" 
+                        <Button
+                          variant="ghost" size="icon" title="O'chirish"
                           className="text-red-500 hover:text-red-700 hover:bg-red-100"
                           onClick={() => handleDeleteClick(entry)}
                         >
@@ -362,7 +345,7 @@ function DaftarPage() {
                 Yangi Kirim Yozuvi Qo'shish
             </DialogTitle>
              <DialogDescription>
-              Kerakli ma'lumotlarni to'ldiring. Majburiy maydonlar <span className="text-red-500">*</span> bilan belgilangan.
+              Kerakli ma'lumotlarni to'ldiring.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 py-4">
@@ -370,7 +353,7 @@ function DaftarPage() {
                 <Label className="text-lg font-medium text-gray-700">Asosiy Ma'lumotlar</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                     <div>
-                        <Label htmlFor="source_details_modal" className="font-medium">Manba Tavsifi <span className="text-red-500">*</span></Label>
+                        <Label htmlFor="source_details_modal" className="font-medium">Manba Tavsifi</Label>
                         <Input id="source_details_modal" name="source_details" value={currentModalEntryData.source_details || ''} onChange={handleMainFormChange} disabled={isSubmitting} placeholder="Kimdan yoki qayerdan olindi"/>
                     </div>
                     <div>
@@ -378,10 +361,10 @@ function DaftarPage() {
                         <Input id="source_phone_modal" name="source_phone" type="text" value={currentModalEntryData.source_phone || ''} onChange={handleMainFormChange} disabled={isSubmitting} placeholder="+998 XX XXX XX XX"/>
                     </div>
                     <div>
-                        <Label htmlFor="currency_modal" className="font-medium">Valyuta <span className="text-red-500">*</span></Label>
-                        <Select 
-                            value={currentModalEntryData.currency || 'UZS'} 
-                            onValueChange={(val) => handleSelectChange('currency', val as 'UZS'|'USD')} 
+                        <Label htmlFor="currency_modal" className="font-medium">Valyuta</Label>
+                        <Select
+                            value={currentModalEntryData.currency || 'UZS'}
+                            onValueChange={(val) => handleSelectChange('currency', val as 'UZS'|'USD')}
                             disabled={isSubmitting}
                         >
                             <SelectTrigger id="currency_modal"><SelectValue /></SelectTrigger>
@@ -392,7 +375,7 @@ function DaftarPage() {
                         </Select>
                     </div>
                      <div>
-                        <Label htmlFor="total_amount_modal" className="font-medium">Umumiy Summa ({currentModalEntryData.currency}) <span className="text-red-500">*</span></Label>
+                        <Label htmlFor="total_amount_modal" className="font-medium">Umumiy Summa ({currentModalEntryData.currency})</Label>
                         <Input id="total_amount_modal" name="total_amount" type="text" inputMode="decimal" value={currentModalEntryData.total_amount || ''} onChange={handleMainFormChange} placeholder="0.00" disabled={isSubmitting}/>
                     </div>
                     <div>
@@ -403,7 +386,7 @@ function DaftarPage() {
                         <Label htmlFor="due_date_for_remaining_modal" className="font-medium">Qoldiq Summani To'lash Sanasi</Label>
                         <Input id="due_date_for_remaining_modal" name="due_date_for_remaining" type="date" value={currentModalEntryData.due_date_for_remaining || ''} onChange={handleMainFormChange} disabled={isSubmitting}/>
                     </div>
-                     <div> {/* Sana maydoni Asosiy Ma'lumotlarga ko'chirildi */}
+                     <div>
                         <Label htmlFor="order_date_modal" className="font-medium">Kirim Sanasi va Vaqti</Label>
                         <Input id="order_date_modal" name="order_date" type="datetime-local" value={currentModalEntryData.order_date || ''} onChange={handleMainFormChange} disabled={isSubmitting}/>
                     </div>
@@ -428,24 +411,24 @@ function DaftarPage() {
                                 <X className="h-4 w-4" />
                             </Button>
                         )}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"> {/* 3 ustunli itemlar uchun */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                             <div>
-                                <Label htmlFor={`product_name_modal-${item.tempId}`} className="font-medium">Nomi <span className="text-red-500">*</span></Label>
+                                <Label htmlFor={`product_name_modal-${item.tempId}`} className="font-medium">Nomi</Label>
                                 <Input id={`product_name_modal-${item.tempId}`} type="text" value={item.product_name || ''} onChange={(e) => handleItemChange(item.tempId, 'product_name', e.target.value)} disabled={isSubmitting} placeholder="Mahsulot yoki xizmat nomi"/>
                             </div>
                             <div>
-                                <Label htmlFor={`quantity_ordered_modal-${item.tempId}`} className="font-medium">Miqdori <span className="text-red-500">*</span></Label>
+                                <Label htmlFor={`quantity_ordered_modal-${item.tempId}`} className="font-medium">Miqdori</Label>
                                 <Input id={`quantity_ordered_modal-${item.tempId}`} type="number" min="0" step="any" value={item.quantity_ordered === 0 && item.product_name ? '' : item.quantity_ordered.toString()} onChange={(e) => handleItemChange(item.tempId, 'quantity_ordered', e.target.value)} placeholder="0" disabled={isSubmitting}/>
                             </div>
                             <div>
-                                <Label htmlFor={`purchase_price_currency_modal-${item.tempId}`} className="font-medium">Narxi ({currentModalEntryData.currency}) <span className="text-red-500">*</span></Label>
-                                <Input id={`purchase_price_currency_modal-${item.tempId}`} type="text" inputMode="decimal" value={item.purchase_price_currency.toString() === '0' ? '' : item.purchase_price_currency.toString()} onChange={(e) => handleItemChange(item.tempId, 'purchase_price_currency', e.target.value)} placeholder="0.00" disabled={isSubmitting}/>
+                                <Label htmlFor={`purchase_price_currency_modal-${item.tempId}`} className="font-medium">Narxi ({currentModalEntryData.currency})</Label>
+                                <Input id={`purchase_price_currency_modal-${item.tempId}`} type="text" inputMode="decimal" value={item.purchase_price_currency.toString() === '0' && item.product_name ? '' : item.purchase_price_currency.toString()} onChange={(e) => handleItemChange(item.tempId, 'purchase_price_currency', e.target.value)} placeholder="0.00" disabled={isSubmitting}/>
                             </div>
                             <div>
                                 <Label htmlFor={`custom_kassa_name_modal-${item.tempId}`} className="font-medium">Kassa (Ixtiyoriy)</Label>
                                 <Input id={`custom_kassa_name_modal-${item.tempId}`} type="text" value={item.custom_kassa_name || ''} onChange={(e) => handleItemChange(item.tempId, 'custom_kassa_name', e.target.value)} disabled={isSubmitting} placeholder="Kassa nomi yoki raqami"/>
                             </div>
-                            <div className="md:col-span-2"> {/* To'lov holati kengroq bo'lishi uchun */}
+                            <div className="md:col-span-2">
                                 <Label htmlFor={`payment_status_custom_modal-${item.tempId}`} className="font-medium">To'lov Turi/Holati (Ixtiyoriy)</Label>
                                 <Input id={`payment_status_custom_modal-${item.tempId}`} type="text" value={item.payment_status_custom || ''} onChange={(e) => handleItemChange(item.tempId, 'payment_status_custom', e.target.value)} disabled={isSubmitting} placeholder="Masalan: Naqd, Plastik, Qarz, To'landi"/>
                             </div>
@@ -458,8 +441,8 @@ function DaftarPage() {
               <Button type="button" variant="outline" onClick={() => { setIsFormModalOpen(false); resetModalFormAndState(false); }} disabled={isSubmitting}>
                 Bekor qilish
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="bg-green-600 hover:bg-green-700 text-white"
                 disabled={isSubmitting}
               >
@@ -477,7 +460,7 @@ function DaftarPage() {
           <DialogHeader>
             <DialogTitle>O'chirishni Tasdiqlang</DialogTitle>
             <DialogDescription>
-              Haqiqatan ham <span className="font-semibold">"{entryToDelete?.source_details}"</span> manbali yozuvni o'chirmoqchimisiz?
+              Haqiqatan ham <span className="font-semibold">"{entryToDelete?.source_details || 'Nomsiz yozuv'}"</span> manbali yozuvni o'chirmoqchimisiz?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4">
