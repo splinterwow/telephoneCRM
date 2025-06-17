@@ -505,9 +505,7 @@ export default function ProductStockManagement({ isAdmin }: ProductStockManageme
                   <TableHead className="hidden md:table-cell px-3 py-3 sm:px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap text-center" onClick={() => handleSort('is_low_stock')}>
                     Holati {renderSortIndicator('is_low_stock')}
                   </TableHead>
-                  {/* <<<--- AMALLAR USTUNI BOSHLANISHI --- */ }
                   {isAdmin && <TableHead className="px-3 py-3 sm:px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider text-right whitespace-nowrap">Amallar</TableHead>}
-                  {/* --- AMALLAR USTUNI TUGASHI --- >>> */ }
                 </TableRow>
               </TableHeader>
               <TableBody className="bg-white divide-y divide-gray-200">
@@ -520,7 +518,6 @@ export default function ProductStockManagement({ isAdmin }: ProductStockManageme
                     <TableCell className={`hidden md:table-cell px-3 py-3 sm:px-4 text-sm font-semibold text-center ${stock.is_low_stock ? "text-orange-600" : "text-green-600"}`}>
                       {stock.is_low_stock ? "Kam qolgan" : "Yetarli"}
                     </TableCell>
-                    {/* <<<--- AMALLAR TUGMALARI BOSHLANISHI --- */ }
                     {isAdmin && (
                       <TableCell className="px-3 py-3 sm:px-4 text-right">
                         <div className="flex justify-end space-x-1">
@@ -611,7 +608,7 @@ export default function ProductStockManagement({ isAdmin }: ProductStockManageme
             <Info className="h-4 w-4 mt-0.5 shrink-0 text-yellow-600" />
             <span className="leading-relaxed">
             Bu amal faqat tizimga xato kiritilgan va boshqa operatsiyalar bilan "ifloslanmagan" qoldiqlar uchun mo'ljallangan.
-            Agar qoldiq > 0 bo'lsa va faqat "Boshlang'ich qoldiq" operatsiyalari mavjud bo'lsa, ular bekor qilinib, yozuv o'chiriladi.
+            Agar qoldiq 0 bo'lsa va faqat "Boshlang'ich qoldiq" operatsiyalari mavjud bo'lsa, ular bekor qilinib, yozuv o'chiriladi.
             Aks holda (boshqa operatsiyalar bo'lsa), o'chirishga ruxsat berilmaydi va xatolik xabari chiqadi.
             </span>
           </div>
