@@ -18,6 +18,7 @@ import {
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
+const API_URL_KASSA_LIST = "https://smartphone777.pythonanywhere.com/api/kassa/";
 const API_URL_DASHBOARD =
   "https://smartphone777.pythonanywhere.com/api/reports/dashboard/";
 const API_URL_SALES_DETAILS =
@@ -34,59 +35,46 @@ const formatDateToYYYYMMDD = (date) => {
   return [year, month, day].join("-");
 };
 
-const formatDateToYYYYMM = (date) => {
-  if (!date) return null;
-  const d = new Date(date);
-  const month = `${d.getMonth() + 1}`.padStart(2, "0");
-  const year = d.getFullYear();
-  return [year, month].join("-");
-};
-
 export default function Dashboard() {
-  console.log("--- Dashboard komponenti render boshlandi ---");
-  const { currentStore, isStoreLoading } = useApp(); // isStoreLoading AppContext dan kelishini taxmin qilamiz
-  console.log("useApp dan: currentStore:", currentStore, "isStoreLoading:", isStoreLoading);
+  const appContext = useApp();
+  const [internalCurrentStore, setInternalCurrentStore] = useState(appContext.currentStore || null);
+  const [internalIsStoreLoading, setInternalIsStoreLoading] = useState(
+    appContext.currentStore ? appContext.isStoreLoading : true
+  );
 
   const [dashboardData, setDashboardData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true); // Boshida true
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [statsPeriodType, setStatsPeriodType] = useState("daily");
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(null);
 
-  // Sales Detail Modal
   const [isSalesDetailModalOpen, setIsSalesDetailModalOpen] = useState(false);
   const [salesDetailData, setSalesDetailData] = useState([]);
   const [isSalesDetailLoading, setIsSalesDetailLoading] = useState(false);
   const [salesDetailError, setSalesDetailError] = useState(null);
   const [salesDetailCurrency, setSalesDetailCurrency] = useState(null);
 
-  // Sales Chart
   const [chartRawData, setChartRawData] = useState({
     labels: [], data: [], currency: "UZS",
   });
-  const [isChartLoading, setIsChartLoading] = useState(true); // Boshida true
+  const [isChartLoading, setIsChartLoading] = useState(true);
   const [chartError, setChartError] = useState(null);
   const [chartDisplayCurrency, setChartDisplayCurrency] = useState("UZS");
   const [chartStartDate, setChartStartDate] = useState(null);
   const [chartEndDate, setChartEndDate] = useState(null);
   const [chartGroupingPeriod, setChartGroupingPeriod] = useState("monthly");
 
-
-  const fetchData = useCallback(async (kassaIdToFetch: number | null) => {
-    console.log(`fetchData chaqirildi. kassaId: ${kassaIdToFetch}, selectedDate: ${selectedDate}, selectedMonth: ${selectedMonth}, statsPeriodType: ${statsPeriodType}`);
-    if (kassaIdToFetch === null) {
-      console.warn("fetchData: kassaIdToFetch null, so'rov yuborilmadi. Dashboard ma'lumotlari bo'sh qoladi.");
-      setIsLoading(false); // Agar kassa bo'lmasa, yuklanishni to'xtatamiz
-      setDashboardData(null); // Eski ma'lumotlarni tozalaymiz
+  const fetchData = useCallback(async (kassaIdToFetch) => {
+    if (kassaIdToFetch === null || kassaIdToFetch === undefined) {
+      setIsLoading(false);
+      setDashboardData(null);
+      if (!error) setError("Kassa ID mavjud emas. Dashboard statistikasi yuklanmadi.");
       return;
     }
-
     setIsLoading(true);
-    setError(null);
-    const params: any = { kassa_id: kassaIdToFetch };
-
+    const params = { kassa_id: kassaIdToFetch };
     if (selectedDate) params.date = selectedDate;
     else if (selectedMonth) params.month = selectedMonth;
     else params.period_type = statsPeriodType;
@@ -96,38 +84,30 @@ export default function Dashboard() {
       if (!token) {
         setError("Iltimos, tizimga kiring."); setIsLoading(false); return;
       }
-      console.log("fetchData: API_URL_DASHBOARD ga so'rov. Params:", params);
       const response = await axios.get(API_URL_DASHBOARD, {
         headers: { Authorization: `Bearer ${token}` }, params, timeout: 10000,
       });
-      console.log("fetchData: API javobi:", response.data);
       setDashboardData(response.data);
-    } catch (err: any) {
-      console.error("Dashboard API xatosi:", err);
-      // Xatolikni qayta ishlash...
+      setError(null);
+    } catch (err) {
        if (err.response?.status === 401) setError("Sessiya muddati tugagan. Iltimos, tizimga qayta kiring.");
         else if (err.code === "ECONNABORTED") setError("So‘rov muddati tugadi. Internet aloqasini tekshiring.");
         else setError(`Dashboard ma'lumotlarini olishda xato: ${err.response?.data?.detail || err.message || "Noma'lum xato"}`);
-      setDashboardData(null); // Xatolikda ma'lumotni tozalash
+      setDashboardData(null);
     } finally {
-      console.log("fetchData: finally.");
       setIsLoading(false);
     }
-  }, [statsPeriodType, selectedDate, selectedMonth]);
+  }, [statsPeriodType, selectedDate, selectedMonth, error]);
 
-
-  const fetchChartData = useCallback(async (kassaIdToFetch: number | null) => {
-    console.log(`fetchChartData chaqirildi. kassaId: ${kassaIdToFetch}, chartGroupingPeriod: ${chartGroupingPeriod}, currency: ${chartDisplayCurrency}, start: ${chartStartDate}, end: ${chartEndDate}`);
-    if (kassaIdToFetch === null) {
-      console.warn("fetchChartData: kassaIdToFetch null, so'rov yuborilmadi. Grafik ma'lumotlari bo'sh qoladi.");
+  const fetchChartData = useCallback(async (kassaIdToFetch) => {
+    if (kassaIdToFetch === null || kassaIdToFetch === undefined) {
       setIsChartLoading(false);
       setChartRawData({ labels: [], data: [], currency: chartDisplayCurrency.toUpperCase() });
+      if (!chartError) setChartError("Kassa ID mavjud emas. Grafik ma'lumotlari yuklanmadi.");
       return;
     }
-
     setIsChartLoading(true);
-    setChartError(null);
-    const params: any = {
+    const params = {
       kassa_id: kassaIdToFetch,
       period_type: chartGroupingPeriod,
       currency: chartDisplayCurrency.toUpperCase(),
@@ -140,112 +120,133 @@ export default function Dashboard() {
       if (!token) {
         setChartError("Grafik uchun: Iltimos, tizimga kiring."); setIsChartLoading(false); return;
       }
-      console.log("fetchChartData: API_URL_SALES_CHART ga so'rov. Params:", params);
       const response = await axios.get(API_URL_SALES_CHART, {
         headers: { Authorization: `Bearer ${token}` }, params, timeout: 10000,
       });
-      console.log("fetchChartData: API javobi:", response.data);
       setChartRawData({
         labels: response.data.labels || [], data: response.data.data || [],
         currency: chartDisplayCurrency.toUpperCase(),
       });
-    } catch (err: any) {
-      console.error("Sales Chart API xatosi:", err);
-      // Xatolikni qayta ishlash...
+      setChartError(null);
+    } catch (err) {
       if (err.response?.status === 401) setChartError("Grafik uchun sessiya muddati tugagan.");
         else if (err.code === "ECONNABORTED") setChartError("Grafik uchun so‘rov muddati tugadi.");
         else setChartError(`Grafik ma'lumotlarini olishda xato: ${err.response?.data?.detail || err.message || "Noma'lum xato"}`);
-      setChartRawData({ labels: [], data: [], currency: chartDisplayCurrency.toUpperCase() }); // Xatolikda ma'lumotni tozalash
+      setChartRawData({ labels: [], data: [], currency: chartDisplayCurrency.toUpperCase() });
     } finally {
-      console.log("fetchChartData: finally.");
       setIsChartLoading(false);
     }
-  }, [chartDisplayCurrency, chartStartDate, chartEndDate, chartGroupingPeriod]);
+  }, [chartDisplayCurrency, chartStartDate, chartEndDate, chartGroupingPeriod, chartError]);
 
-
-  // Asosiy ma'lumotlarni yuklash uchun useEffect
   useEffect(() => {
-    console.log("Asosiy useEffect ishga tushdi. isStoreLoading:", isStoreLoading, "currentStore:", currentStore);
-    if (isStoreLoading === false) { // Faqat AppContext dan store yuklanib bo'lganda
-      const idToFetch = currentStore?.id || null; // Agar store yo'q bo'lsa null
-      console.log("Asosiy useEffect: idToFetch:", idToFetch);
-      fetchData(idToFetch);
-      fetchChartData(idToFetch);
-    } else if (isStoreLoading === undefined) {
-        // Agar AppContext da isStoreLoading yo'q bo'lsa, currentStore.id ni darhol ishlatamiz
-        console.warn("AppContext da isStoreLoading topilmadi. currentStore.id ni darhol ishlatishga harakat qilinadi.");
-        const idToFetchImmediate = currentStore?.id || null;
-        fetchData(idToFetchImmediate);
-        fetchChartData(idToFetchImmediate);
-    } else {
-        console.log("Asosiy useEffect: currentStore hali yuklanmoqda...");
-        // Yuklanishni davom ettiramiz, chunki isLoading/isChartLoading true
-    }
-  }, [isStoreLoading, currentStore, fetchData, fetchChartData]);
-  // `fetchData` va `fetchChartData` `useCallback` da o'z dependencylariga ega,
-  // shuning uchun ular o'zgarganda bu `useEffect` qayta ishlaydi.
-
+    const fetchKassaAndInitialData = async () => {
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        setError("Iltimos, tizimga kiring.");
+        setInternalIsStoreLoading(false); setIsLoading(false); setIsChartLoading(false);
+        return;
+      }
+      if (!appContext.currentStore && appContext.isStoreLoading !== false) {
+        setInternalIsStoreLoading(true);
+        try {
+          const response = await axios.get(API_URL_KASSA_LIST, {
+            headers: { Authorization: `Bearer ${token}` },
+            params: { page_size: 1 }, timeout: 10000,
+          });
+          if (response.data && response.data.results && response.data.results.length > 0) {
+            const fetchedKassa = response.data.results[0];
+            setInternalCurrentStore(fetchedKassa);
+            if (fetchedKassa?.id) {
+              fetchData(fetchedKassa.id);
+              fetchChartData(fetchedKassa.id);
+            } else {
+               setError("Kassa ID topilmadi. Dashboard ma'lumotlari yuklanmadi.");
+               setIsLoading(false); setIsChartLoading(false);
+            }
+          } else {
+            setError("Kassa topilmadi. Dashboard ma'lumotlari yuklanmadi.");
+            setIsLoading(false); setIsChartLoading(false);
+          }
+        } catch (kassaErr) {
+          let kassaErrorMsg = "Kassani yuklashda xato yuz berdi.";
+          if (kassaErr.response?.status === 401) kassaErrorMsg = "Sessiya muddati tugagan (kassa).";
+          else if (kassaErr.code === "ECONNABORTED") kassaErrorMsg = "Kassa uchun so'rov muddati tugadi.";
+          else if (kassaErr.response?.data?.detail) kassaErrorMsg = kassaErr.response.data.detail;
+          setError(kassaErrorMsg);
+          setIsLoading(false); setIsChartLoading(false);
+        } finally {
+          setInternalIsStoreLoading(false);
+        }
+      } else if (appContext.currentStore) {
+        setInternalCurrentStore(appContext.currentStore);
+        setInternalIsStoreLoading(appContext.isStoreLoading);
+        if (appContext.isStoreLoading === false && appContext.currentStore?.id) {
+            fetchData(appContext.currentStore.id);
+            fetchChartData(appContext.currentStore.id);
+        } else if (appContext.isStoreLoading === false && !appContext.currentStore?.id) {
+            setError("Kassa ID AppContext dan kelmadi. Dashboard ma'lumotlari yuklanmadi.");
+            setIsLoading(false); setIsChartLoading(false);
+        }
+      } else {
+        setError("Kassa konfiguratsiyasida muammo. Dashboard ma'lumotlari yuklanmadi.");
+        setInternalIsStoreLoading(false); setIsLoading(false); setIsChartLoading(false);
+      }
+    };
+    fetchKassaAndInitialData();
+  }, [appContext.currentStore, appContext.isStoreLoading, fetchData, fetchChartData]);
 
   const fetchSalesDetails = useCallback(async (currencyType) => {
-    const kassaIdForDetails = currentStore?.id || null; // Har doim joriy store dan olish
-    console.log(`fetchSalesDetails chaqirildi. currencyType: ${currencyType}, kassaIdForDetails: ${kassaIdForDetails}`);
+    const kassaIdForDetails = internalCurrentStore?.id || null;
     if (kassaIdForDetails === null) {
       setSalesDetailError("Kassa tanlanmagan yoki mavjud emas.");
-      setIsSalesDetailLoading(false); // Yuklanishni to'xtatish
-      setIsSalesDetailModalOpen(true); // Modalni ochish (xatolikni ko'rsatish uchun)
-      setSalesDetailData([]); // Ma'lumotni tozalash
+      setIsSalesDetailLoading(false); setIsSalesDetailModalOpen(true); setSalesDetailData([]);
       return;
     }
-    // ... (qolgan kod avvalgidek)
-    setIsSalesDetailModalOpen(true);
-    setIsSalesDetailLoading(true);
-    setSalesDetailError(null);
-    setSalesDetailData([]);
-    setSalesDetailCurrency(
-      currencyType === "ALL_CURRENCIES" ? "Barcha" : currencyType
-    );
-
-    const params: any = { kassa_id: kassaIdForDetails };
-      if (selectedDate) params.date = selectedDate;
+    setIsSalesDetailModalOpen(true); setIsSalesDetailLoading(true);
+    setSalesDetailError(null); setSalesDetailData([]);
+    setSalesDetailCurrency(currencyType === "ALL_CURRENCIES" ? "Barcha" : currencyType);
+    const params = { kassa_id: kassaIdForDetails };
+    if (selectedDate) params.date = selectedDate;
     else if (selectedMonth) params.month = selectedMonth;
     else params.period_type = statsPeriodType;
-
     if (currencyType !== "ALL_CURRENCIES") {
       params.currency = currencyType.toLowerCase();
     }
-
     try {
       const token = localStorage.getItem("accessToken");
       if (!token) {
-        setSalesDetailError("Iltimos, tizimga kiring.");
-        setIsSalesDetailLoading(false); return;
+        setSalesDetailError("Iltimos, tizimga kiring."); setIsSalesDetailLoading(false); return;
       }
-      console.log("fetchSalesDetails: API_URL_SALES_DETAILS ga so'rov. Params:", params);
       const response = await axios.get(API_URL_SALES_DETAILS, {
         headers: { Authorization: `Bearer ${token}` }, params, timeout: 15000,
       });
-      console.log("fetchSalesDetails: API javobi:", response.data);
       setSalesDetailData( Array.isArray(response.data) ? response.data : response.data.results || []);
-    } catch (err:any) {
-        console.error("Sales Detail API xatosi:", err);
-      // Xatolikni qayta ishlash...
+      setSalesDetailError(null);
+    } catch (err) {
        if (err.response?.status === 401) setSalesDetailError("Sessiya muddati tugagan. Iltimos, tizimga qayta kiring.");
         else if (err.code === "ECONNABORTED") setSalesDetailError("So‘rov muddati tugadi. Internetni tekshiring.");
         else setSalesDetailError(`Sotuvlar ro'yxatini olishda xato: ${err.response?.data?.detail || err.message || "Noma'lum xato"}`);
         setSalesDetailData([]);
     } finally {
-      console.log("fetchSalesDetails: finally.");
       setIsSalesDetailLoading(false);
     }
-  }, [currentStore, statsPeriodType, selectedDate, selectedMonth]); // currentStore ga bog'liqlik qo'shildi
+  }, [internalCurrentStore, statsPeriodType, selectedDate, selectedMonth]);
 
+  useEffect(() => {
+    if (internalCurrentStore?.id) {
+        fetchData(internalCurrentStore.id);
+    }
+  }, [statsPeriodType, selectedDate, selectedMonth, internalCurrentStore?.id, fetchData]);
 
-  // ... (formatCurrency, formatCount, handle... funksiyalari avvalgidek)
-   const formatCurrency = (number) => {
+  useEffect(() => {
+    if (internalCurrentStore?.id) {
+        fetchChartData(internalCurrentStore.id);
+    }
+  }, [chartDisplayCurrency, chartStartDate, chartEndDate, chartGroupingPeriod, internalCurrentStore?.id, fetchChartData]);
+
+  const formatCurrency = (number) => {
     const num = parseFloat(number);
-    return isNaN(num)
-      ? "0"
-      : new Intl.NumberFormat("uz-UZ").format(Math.round(num));
+    return isNaN(num) ? "0" : new Intl.NumberFormat("uz-UZ").format(Math.round(num));
   };
 
   const formatCount = (number) => {
@@ -266,26 +267,20 @@ export default function Dashboard() {
   };
 
   const clearStatsFilters = () => {
-    setSelectedDate(null);
-    setSelectedMonth(null);
-    setStatsPeriodType("daily");
+    setSelectedDate(null); setSelectedMonth(null); setStatsPeriodType("daily");
   };
 
   const clearChartFilters = () => {
-    setChartStartDate(null);
-    setChartEndDate(null);
-    setChartGroupingPeriod("monthly");
-    setChartDisplayCurrency("UZS");
+    setChartStartDate(null); setChartEndDate(null);
+    setChartGroupingPeriod("monthly"); setChartDisplayCurrency("UZS");
   };
 
-  // ... (ma'lumotlarni chiqarish logikasi avvalgidek)
   let cashflow_usd = 0, cashflow_uzs = 0;
   let net_profit_usd = 0, net_profit_uzs = 0;
   let sales_count_usd = 0, sales_count_uzs = 0, total_sales_count = 0;
   let cardTitlePrefix = "Joriy";
 
   if (dashboardData) {
-    // ... (avvalgi logika, faqat statsPeriodType ishlatiladi)
     if (selectedDate) {
         cashflow_usd = dashboardData.today_cashflow_usd || 0;
         cashflow_uzs = dashboardData.today_cashflow_uzs || 0;
@@ -293,7 +288,8 @@ export default function Dashboard() {
         net_profit_uzs = dashboardData.today_net_profit_uzs || 0;
         sales_count_usd = dashboardData.today_sales_usd_count || 0;
         sales_count_uzs = dashboardData.today_sales_uzs_count || 0;
-        cardTitlePrefix = `${new Date(selectedDate + 'T00:00:00').toLocaleDateString('uz-Latn-UZ', { year: 'numeric', month: 'long', day: 'numeric' })}gi`;
+        const displayDate = new Date(selectedDate + 'T00:00:00');
+        cardTitlePrefix = `${displayDate.toLocaleDateString('uz-Latn-UZ', { year: 'numeric', month: 'long', day: 'numeric' })}gi`;
     } else if (selectedMonth) {
         cashflow_usd = dashboardData.monthly_cashflow_usd || 0;
         cashflow_uzs = dashboardData.monthly_cashflow_uzs || 0;
@@ -302,9 +298,10 @@ export default function Dashboard() {
         sales_count_usd = dashboardData.monthly_sales_usd_count || 0;
         sales_count_uzs = dashboardData.monthly_sales_uzs_count || 0;
         const [year, month] = selectedMonth.split('-');
-        cardTitlePrefix = `${new Date(year, parseInt(month)-1).toLocaleDateString('uz-Latn-UZ', { year: 'numeric', month: 'long' })} oyi uchun`;
+        const displayMonth = new Date(parseInt(year), parseInt(month)-1, 1);
+        cardTitlePrefix = `${displayMonth.toLocaleDateString('uz-Latn-UZ', { year: 'numeric', month: 'long' })} oyi uchun`;
     } else {
-        if (statsPeriodType === "daily") { /* ... */ cardTitlePrefix = "Kunlik";
+        if (statsPeriodType === "daily") { cardTitlePrefix = "Kunlik";
             cashflow_usd = dashboardData.today_cashflow_usd || 0;
             cashflow_uzs = dashboardData.today_cashflow_uzs || 0;
             net_profit_usd = dashboardData.today_net_profit_usd || 0;
@@ -312,7 +309,7 @@ export default function Dashboard() {
             sales_count_usd = dashboardData.today_sales_usd_count || 0;
             sales_count_uzs = dashboardData.today_sales_uzs_count || 0;
         }
-        else if (statsPeriodType === "monthly") { /* ... */  cardTitlePrefix = "Oylik";
+        else if (statsPeriodType === "monthly") { cardTitlePrefix = "Oylik";
             cashflow_usd = dashboardData.monthly_cashflow_usd || 0;
             cashflow_uzs = dashboardData.monthly_cashflow_uzs || 0;
             net_profit_usd = dashboardData.monthly_net_profit_usd || 0;
@@ -320,7 +317,7 @@ export default function Dashboard() {
             sales_count_usd = dashboardData.monthly_sales_usd_count || 0;
             sales_count_uzs = dashboardData.monthly_sales_uzs_count || 0;
         }
-        else if (statsPeriodType === "all") { /* ... */ cardTitlePrefix = "Umumiy";
+        else if (statsPeriodType === "all") { cardTitlePrefix = "Umumiy";
             cashflow_usd = dashboardData.total_cashflow_usd || 0;
             cashflow_uzs = dashboardData.total_cashflow_uzs || 0;
             net_profit_usd = dashboardData.total_net_profit_usd || 0;
@@ -334,9 +331,8 @@ export default function Dashboard() {
 
   const changePercentage = parseFloat(dashboardData?.sales_change_percentage) || 0;
   const commonDesc =
-    dashboardData?.sales_change_percentage !== undefined &&
-    !selectedDate && !selectedMonth
-    ? ( /* ... */ <span className={`${changePercentage >= 0 ? "text-green-500" : "text-red-500"} flex items-center text-xs`} >
+    dashboardData?.sales_change_percentage !== undefined && !selectedDate && !selectedMonth
+    ? ( <span className={`${changePercentage >= 0 ? "text-green-500" : "text-red-500"} flex items-center text-xs`} >
         {changePercentage >= 0 ? ( <ChevronUp className="h-4 w-4 mr-1" /> ) : ( <ChevronDown className="h-4 w-4 mr-1" /> )}
         {changePercentage >= 0 ? "+" : ""}
         {parseFloat(changePercentage).toFixed(1)}% o'zgarish
@@ -347,10 +343,7 @@ export default function Dashboard() {
     if (chartStartDate && chartEndDate) chartTitleSuffix = ` (${formatDateToYYYYMMDD(chartStartDate)} - ${formatDateToYYYYMMDD(chartEndDate)})`;
     else if (chartStartDate) chartTitleSuffix = ` (${formatDateToYYYYMMDD(chartStartDate)} dan)`;
 
-
-  // Yuklanish holatini boshqarish
-  if (isStoreLoading !== false && isStoreLoading !== undefined) { // AppContext dan store yuklanishini kutamiz
-    console.log("Render: Yuklanish ekrani (isStoreLoading).");
+  if (internalIsStoreLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-12 w-12 animate-spin mr-3 text-primary" />
@@ -359,32 +352,38 @@ export default function Dashboard() {
     );
   }
 
-  if (isLoading || isChartLoading) { // API so'rovlari bajarilayotgan bo'lsa
-      // Agar birinchi marta yuklanayotgan bo'lsa (dashboardData va chartRawData bo'sh bo'lsa) to'liq ekran loader
-      if (!dashboardData && !chartRawData.labels.length) {
-          console.log("Render: Yuklanish ekrani (API so'rovlari).");
-            return (
-                <div className="flex items-center justify-center h-screen">
-                    <Loader2 className="h-12 w-12 animate-spin mr-3 text-primary" />
-                    <p className="text-lg">Ma'lumotlar yuklanmoqda...</p>
-                </div>
-            );
-      }
-      // Agar qisman ma'lumot bo'lsa, kichik loader ko'rsatiladi (keyingi renderda)
-  }
-
-
-  if (error && !dashboardData) { // Faqat dashboard uchun asosiy xatolik bo'lsa
-    console.log("Render: Xatolik ekrani (dashboardData uchun).");
-    // ... (Xatolik ekrani JSX)
+  if (!internalCurrentStore?.id && error) {
     return (
       <div className="text-center text-destructive-foreground bg-destructive p-6 rounded-lg shadow-md mt-10 max-w-md mx-auto">
         <h2 className="text-xl font-semibold mb-2">Xatolik!</h2>
         <p>{error}</p>
+         <button
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        >
+          Sahifani yangilash
+        </button>
+      </div>
+    );
+  }
+  
+  if ((isLoading || isChartLoading) && !dashboardData && (!chartRawData || !chartRawData.labels || !chartRawData.labels.length)) {
+      return (
+          <div className="flex items-center justify-center h-screen">
+              <Loader2 className="h-12 w-12 animate-spin mr-3 text-primary" />
+              <p className="text-lg">Ma'lumotlar yuklanmoqda...</p>
+          </div>
+      );
+  }
+
+  if (internalCurrentStore?.id && error && !dashboardData) {
+    return (
+      <div className="text-center text-destructive-foreground bg-destructive p-6 rounded-lg shadow-md mt-10 max-w-md mx-auto">
+        <h2 className="text-xl font-semibold mb-2">Dashboard Xatoligi!</h2>
+        <p>{error}</p>
         <button
           onClick={() => {
-            if (currentStore?.id) fetchData(currentStore.id);
-            // yoki isStoreLoading === false bo'lganda
+            if (internalCurrentStore?.id) fetchData(internalCurrentStore.id);
           }}
           className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
@@ -393,21 +392,20 @@ export default function Dashboard() {
       </div>
     );
   }
-  console.log("--- Dashboard komponenti render tugadi ---");
-  // JSX qismi avvalgidek
+
   return (
     <div className="space-y-6 p-4 md:p-6 relative">
-      {(isLoading || isChartLoading) && (dashboardData || chartRawData.labels.length > 0) && (
+      {(isLoading || isChartLoading) && (dashboardData || (chartRawData && chartRawData.labels && chartRawData.labels.length > 0)) && (
           <div className="absolute top-4 right-4 z-50 bg-background/80 p-2 rounded-full shadow">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         )}
-      {error && dashboardData && ( // Agar dashboardData bor bo'lsa, xatolikni kichikroq ko'rsatamiz
+      {error && (dashboardData || (chartRawData && chartRawData.labels && chartRawData.labels.length > 0)) && (
          <div className="mb-4 text-center text-sm text-destructive-foreground bg-destructive p-3 rounded-md">
           <p>Ma'lumotlarni yangilashda xatolik: {error}</p>
           <button
             onClick={() => {
-              if (currentStore?.id) fetchData(currentStore.id);
+              if (internalCurrentStore?.id) fetchData(internalCurrentStore.id);
             }}
             className="mt-2 px-3 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
           >
@@ -421,10 +419,9 @@ export default function Dashboard() {
           Boshqaruv paneli
         </h1>
         <p className="text-muted-foreground mt-1">
-          {currentStore?.name || `Kassa: ${isStoreLoading ? 'Yuklanmoqda...' : (currentStore?.id || 'Tanlanmagan')}`}
+          {internalCurrentStore?.name || `Kassa: ${internalIsStoreLoading ? 'Yuklanmoqda...' : (internalCurrentStore?.id || 'Tanlanmagan')}`}
         </p>
       </div>
-
       <div className="p-4 border rounded-lg shadow-sm bg-card mb-6">
         <h3 className="text-lg font-semibold mb-3 text-card-foreground">Statistika Filtrlari</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
@@ -440,7 +437,7 @@ export default function Dashboard() {
                 setSelectedDate(null);
                 setSelectedMonth(null);
               }}
-              disabled={!!selectedDate || !!selectedMonth}
+              disabled={!!selectedDate || !!selectedMonth || !internalCurrentStore?.id}
               className="p-2 w-full border border-border rounded-md shadow-sm focus:ring-primary focus:border-primary bg-background text-foreground"
             >
               <option value="daily">Kunlik (Joriy)</option>
@@ -457,6 +454,7 @@ export default function Dashboard() {
               id="selectedDate"
               value={selectedDate || ""}
               onChange={handleStatsDateChange}
+              disabled={!internalCurrentStore?.id}
               className="p-2 w-full border border-border rounded-md shadow-sm focus:ring-primary focus:border-primary bg-background text-foreground"
             />
           </div>
@@ -468,6 +466,7 @@ export default function Dashboard() {
               type="month"
               id="selectedMonth"
               value={selectedMonth || ""}
+              disabled={!internalCurrentStore?.id}
               onChange={handleStatsMonthChange}
               className="p-2 w-full border border-border rounded-md shadow-sm focus:ring-primary focus:border-primary bg-background text-foreground"
             />
@@ -475,6 +474,7 @@ export default function Dashboard() {
           <div>
             <button
               onClick={clearStatsFilters}
+              disabled={!internalCurrentStore?.id}
               className="w-full p-2 border border-border rounded-md shadow-sm bg-muted hover:bg-muted/80 text-muted-foreground flex items-center justify-center gap-2"
             >
               <FilterX className="h-4 w-4" /> Tozalash
@@ -499,176 +499,187 @@ export default function Dashboard() {
               Sof foyda to'g'ri hisoblanishi uchun mahsulotlarning tan narxlari (sotib olish narxi) tizimga kiritilgan bo'lishi shart.
               Aks holda, tan narxi kiritilmagan mahsulotlar uchun foyda 0 deb hisoblanishi mumkin.
             </span>
+            <br />
+            <span className="block sm:inline ml-1 mt-1">
+                Kassa balansi har doim joriy vaqtdagi balansni ko'rsatadi va tanlangan sanaga bog'liq emas.
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-         <StatsCard
-          title={`${cardTitlePrefix} tushum (USD)`}
-          value={`${formatCurrency(cashflow_usd)} USD`}
-          icon={<Landmark className="h-5 w-5 text-purple-500" />}
-          description={commonDesc}
-          onClick={() => fetchSalesDetails("USD")}
-          className="cursor-pointer hover:shadow-lg transition-shadow"
-        />
-        <StatsCard
-          title={`${cardTitlePrefix} tushum (UZS)`}
-          value={`${formatCurrency(cashflow_uzs)} UZS`}
-          icon={<Landmark className="h-5 w-5 text-teal-500" />}
-          description={commonDesc}
-          onClick={() => fetchSalesDetails("UZS")}
-          className="cursor-pointer hover:shadow-lg transition-shadow"
-        />
-         <StatsCard
-          title={`${cardTitlePrefix} JAMI SOTUVLAR`}
-          value={`${formatCount(total_sales_count)} dona`}
-          icon={<ShoppingCart className="h-5 w-5 text-orange-500" />}
-          description="Barcha valyutadagi tranzaksiyalar soni"
-          onClick={() => fetchSalesDetails("ALL_CURRENCIES")}
-          className="cursor-pointer hover:shadow-lg transition-shadow"
-        />
-        <StatsCard
-          title={`${cardTitlePrefix} sof foyda (USD)`}
-          value={`${formatCurrency(net_profit_usd)} USD`}
-          icon={<TrendingUp className="h-5 w-5 text-sky-500" />}
-          description={commonDesc}
-          className="hover:shadow-lg transition-shadow"
-        />
-        <StatsCard
-          title={`${cardTitlePrefix} sof foyda (UZS)`}
-          value={`${formatCurrency(net_profit_uzs)} UZS`}
-          icon={<TrendingUp className="h-5 w-5 text-lime-500" />}
-          description={commonDesc}
-          className="hover:shadow-lg transition-shadow"
-        />
-         {dashboardData?.kassa_balance_uzs !== undefined && (
+      {internalCurrentStore?.id && dashboardData && (
+        <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatsCard
-            title="Kassa Balansi (UZS)"
-            value={`${formatCurrency(dashboardData.kassa_balance_uzs)} UZS`}
-            icon={<Landmark className="h-5 w-5 text-gray-500" />}
-            description="Joriy vaqtdagi kassa balansi"
-            className="opacity-80"
+              title={`${cardTitlePrefix} tushum (USD)`}
+              value={`${formatCurrency(cashflow_usd)} USD`}
+              icon={<Landmark className="h-5 w-5 text-purple-500" />}
+              description={commonDesc}
+              onClick={() => fetchSalesDetails("USD")}
+              className="cursor-pointer hover:shadow-lg transition-shadow"
             />
-        )}
-        {dashboardData?.kassa_balance_usd !== undefined && (
             <StatsCard
-            title="Kassa Balansi (USD)"
-            value={`${formatCurrency(dashboardData.kassa_balance_usd)} USD`}
-            icon={<Landmark className="h-5 w-5 text-gray-400" />}
-            description="Joriy vaqtdagi kassa balansi"
-            className="opacity-80"
+              title={`${cardTitlePrefix} tushum (UZS)`}
+              value={`${formatCurrency(cashflow_uzs)} UZS`}
+              icon={<Landmark className="h-5 w-5 text-teal-500" />}
+              description={commonDesc}
+              onClick={() => fetchSalesDetails("UZS")}
+              className="cursor-pointer hover:shadow-lg transition-shadow"
             />
-        )}
-      </div>
+            <StatsCard
+              title={`${cardTitlePrefix} JAMI SOTUVLAR`}
+              value={`${formatCount(total_sales_count)} dona`}
+              icon={<ShoppingCart className="h-5 w-5 text-orange-500" />}
+              description="Barcha valyutadagi tranzaksiyalar soni"
+              onClick={() => fetchSalesDetails("ALL_CURRENCIES")}
+              className="cursor-pointer hover:shadow-lg transition-shadow"
+            />
+            <StatsCard
+              title={`${cardTitlePrefix} sof foyda (USD)`}
+              value={`${formatCurrency(net_profit_usd)} USD`}
+              icon={<TrendingUp className="h-5 w-5 text-sky-500" />}
+              description={commonDesc}
+              className="hover:shadow-lg transition-shadow"
+            />
+            <StatsCard
+              title={`${cardTitlePrefix} sof foyda (UZS)`}
+              value={`${formatCurrency(net_profit_uzs)} UZS`}
+              icon={<TrendingUp className="h-5 w-5 text-lime-500" />}
+              description={commonDesc}
+              className="hover:shadow-lg transition-shadow"
+            />
+            {dashboardData?.kassa_balance_uzs !== undefined && (
+                <StatsCard
+                title="Kassa Balansi (UZS)"
+                value={`${formatCurrency(dashboardData.kassa_balance_uzs)} UZS`}
+                icon={<Landmark className="h-5 w-5 text-gray-500" />}
+                description="Joriy vaqtdagi kassa balansi"
+                className="opacity-80"
+                />
+            )}
+            {dashboardData?.kassa_balance_usd !== undefined && (
+                <StatsCard
+                title="Kassa Balansi (USD)"
+                value={`${formatCurrency(dashboardData.kassa_balance_usd)} USD`}
+                icon={<Landmark className="h-5 w-5 text-gray-400" />}
+                description="Joriy vaqtdagi kassa balansi"
+                className="opacity-80"
+                />
+            )}
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-        <div className="lg:col-span-2 bg-card p-4 rounded-lg shadow">
-            <h3 className="text-lg font-semibold mb-3 text-card-foreground">Sotuvlar Grafigi Filtrlari</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end mb-4">
-                 <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-muted-foreground mb-1">
-                        Davr Tanlash (Grafik uchun)
-                    </label>
-                    <div className="flex items-center gap-2">
-                        <DatePicker
-                            selected={chartStartDate}
-                            onChange={(date) => setChartStartDate(date)}
-                            selectsStart
-                            startDate={chartStartDate}
-                            endDate={chartEndDate}
-                            placeholderText="Boshlanish sanasi"
-                            dateFormat="yyyy-MM-dd"
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
+            <div className="lg:col-span-2 bg-card p-4 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-3 text-card-foreground">Sotuvlar Grafigi Filtrlari</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end mb-4">
+                    <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium text-muted-foreground mb-1">
+                            Davr Tanlash (Grafik uchun)
+                        </label>
+                        <div className="flex items-center gap-2">
+                            <DatePicker
+                                selected={chartStartDate}
+                                onChange={(date) => setChartStartDate(date)}
+                                selectsStart
+                                startDate={chartStartDate}
+                                endDate={chartEndDate}
+                                placeholderText="Boshlanish sanasi"
+                                dateFormat="yyyy-MM-dd"
+                                className="p-2 w-full border border-border rounded-md shadow-sm bg-background text-foreground"
+                                isClearable
+                            />
+                            <DatePicker
+                                selected={chartEndDate}
+                                onChange={(date) => setChartEndDate(date)}
+                                selectsEnd
+                                startDate={chartStartDate}
+                                endDate={chartEndDate}
+                                minDate={chartStartDate}
+                                placeholderText="Tugash sanasi"
+                                dateFormat="yyyy-MM-dd"
+                                className="p-2 w-full border border-border rounded-md shadow-sm bg-background text-foreground"
+                                isClearable
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="chartGroupingPeriod" className="block text-sm font-medium text-muted-foreground mb-1">
+                            Guruhlash Intervali
+                        </label>
+                        <select
+                            id="chartGroupingPeriod"
+                            value={chartGroupingPeriod}
+                            onChange={(e) => setChartGroupingPeriod(e.target.value)}
                             className="p-2 w-full border border-border rounded-md shadow-sm bg-background text-foreground"
-                        />
-                        <DatePicker
-                            selected={chartEndDate}
-                            onChange={(date) => setChartEndDate(date)}
-                            selectsEnd
-                            startDate={chartStartDate}
-                            endDate={chartEndDate}
-                            minDate={chartStartDate}
-                            placeholderText="Tugash sanasi"
-                            dateFormat="yyyy-MM-dd"
+                        >
+                            <option value="daily">Kunlik</option>
+                            <option value="weekly">Haftalik</option>
+                            <option value="monthly">Oylik</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="chartDisplayCurrency" className="block text-sm font-medium text-muted-foreground mb-1">
+                            Grafik Valyutasi
+                        </label>
+                        <select
+                            id="chartDisplayCurrency"
+                            value={chartDisplayCurrency}
+                            onChange={(e) => setChartDisplayCurrency(e.target.value)}
                             className="p-2 w-full border border-border rounded-md shadow-sm bg-background text-foreground"
-                        />
+                        >
+                            <option value="UZS">UZS</option>
+                            <option value="USD">USD</option>
+                        </select>
+                    </div>
+                    <div className="md:col-start-4">
+                        <button
+                        onClick={clearChartFilters}
+                        className="w-full p-2 border border-border rounded-md shadow-sm bg-muted hover:bg-muted/80 text-muted-foreground flex items-center justify-center gap-2"
+                        >
+                        <FilterX className="h-4 w-4" /> Tozalash
+                        </button>
                     </div>
                 </div>
-                 <div>
-                    <label htmlFor="chartGroupingPeriod" className="block text-sm font-medium text-muted-foreground mb-1">
-                        Guruhlash Intervali
-                    </label>
-                    <select
-                        id="chartGroupingPeriod"
-                        value={chartGroupingPeriod}
-                        onChange={(e) => setChartGroupingPeriod(e.target.value)}
-                        className="p-2 w-full border border-border rounded-md shadow-sm bg-background text-foreground"
-                    >
-                        <option value="daily">Kunlik</option>
-                        <option value="weekly">Haftalik</option>
-                        <option value="monthly">Oylik</option>
-                    </select>
-                </div>
-                <div>
-                    <label htmlFor="chartDisplayCurrency" className="block text-sm font-medium text-muted-foreground mb-1">
-                        Grafik Valyutasi
-                    </label>
-                    <select
-                        id="chartDisplayCurrency"
-                        value={chartDisplayCurrency}
-                        onChange={(e) => setChartDisplayCurrency(e.target.value)}
-                        className="p-2 w-full border border-border rounded-md shadow-sm bg-background text-foreground"
-                    >
-                        <option value="UZS">UZS</option>
-                        <option value="USD">USD</option>
-                    </select>
-                </div>
-                 <div className="md:col-start-4">
-                    <button
-                    onClick={clearChartFilters}
-                    className="w-full p-2 border border-border rounded-md shadow-sm bg-muted hover:bg-muted/80 text-muted-foreground flex items-center justify-center gap-2"
-                    >
-                    <FilterX className="h-4 w-4" /> Tozalash
-                    </button>
-                </div>
-            </div>
 
-          {isChartLoading && !chartRawData.labels.length && ( // Faqat birinchi marta yuklanayotganda yoki data yo'q bo'lsa
-             <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin mr-2 text-primary" />
-              <p className="text-muted-foreground">Grafik yuklanmoqda...</p>
+              {(isChartLoading && (!chartRawData || !chartRawData.labels || chartRawData.labels.length === 0)) && (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="h-8 w-8 animate-spin mr-2 text-primary" />
+                  <p className="text-muted-foreground">Grafik yuklanmoqda...</p>
+                </div>
+              )}
+              {chartError && !isChartLoading && (
+                <div className="text-center text-destructive-foreground bg-destructive p-4 rounded h-64 flex flex-col justify-center items-center">
+                  <p className="font-semibold">Grafik xatosi!</p>
+                  <p className="text-sm mt-1">{chartError}</p>
+                  <button
+                    onClick={() => {
+                      if (internalCurrentStore?.id) fetchChartData(internalCurrentStore.id);
+                    }}
+                    className="mt-3 px-3 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                  >
+                    Qayta urinish
+                  </button>
+                </div>
+              )}
+              {!isChartLoading && !chartError && chartRawData && chartRawData.labels && chartRawData.labels.length > 0 && (
+                <SalesChart
+                  title={`Sotuvlar grafigi (${chartRawData.currency})${chartTitleSuffix}`}
+                  labels={chartRawData.labels}
+                  data={chartRawData.data}
+                />
+              )}
+              {!isChartLoading && !chartError && (!chartRawData || !chartRawData.labels || chartRawData.labels.length === 0) && (
+                <div className="flex items-center justify-center h-64">
+                  <p className="text-muted-foreground">
+                    Tanlangan davr va valyuta uchun grafik ma'lumotlari mavjud emas.
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-          {chartError && !isChartLoading && (
-             <div className="text-center text-destructive-foreground bg-destructive p-4 rounded h-64 flex flex-col justify-center items-center">
-              <p className="font-semibold">Grafik xatosi!</p>
-              <p className="text-sm mt-1">{chartError}</p>
-              <button
-                onClick={() => {
-                  if (currentStore?.id) fetchChartData(currentStore.id);
-                }}
-                className="mt-3 px-3 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
-              >
-                Qayta urinish
-              </button>
-            </div>
-          )}
-          {!isChartLoading && !chartError && chartRawData.labels.length > 0 && (
-            <SalesChart
-              title={`Sotuvlar grafigi (${chartRawData.currency})${chartTitleSuffix}`}
-              labels={chartRawData.labels}
-              data={chartRawData.data}
-            />
-          )}
-          {!isChartLoading && !chartError && chartRawData.labels.length === 0 && !isChartLoading && ( // Ma'lumot yo'q holati
-             <div className="flex items-center justify-center h-64">
-              <p className="text-muted-foreground">
-                Tanlangan davr va valyuta uchun grafik ma'lumotlari mavjud emas.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
+
       {isSalesDetailModalOpen && (
          <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-[100] p-4 transition-opacity duration-300 ease-in-out">
           <div className="bg-background p-5 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col transform transition-all duration-300 ease-in-out scale-100">
@@ -715,7 +726,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {salesDetailData.map((item: any, index) => (
+                      {salesDetailData.map((item, index) => (
                         <tr key={item.id || item.product_id || `sale-item-${index}`} className="hover:bg-muted/30">
                           <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
                             {item.product_name || item.product?.name || "Noma'lum mahsulot"}
